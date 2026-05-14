@@ -545,14 +545,61 @@ export default {
       return this.usdtOrder.payment_uri || this.usdtOrder.address || ''
     },
 
-    copyText (txt) {
+    /**
+     * Copy a string to the clipboard.
+     *
+     * Notes
+     * - Does NOT depend on `this.$copyText` (vue-clipboard2). That plugin is
+     *   listed in package.json but is never registered in main.js, so calling
+     *   `this.$copyText` throws TypeError and the error toast falls through to
+     *   `this.$t('common.copyFailed')`. vue-i18n returns the key itself when a
+     *   key is missing, and a non-empty string is truthy, so the JS-style
+     *   `this.$t(key) || 'fallback'` pattern silently fails — that is exactly
+     *   why the user saw `common.copyFailed` rendered literally on screen.
+     * - Two-tier strategy: prefer the modern async Clipboard API (works in
+     *   secure contexts including Capacitor https://localhost), and fall back
+     *   to the legacy execCommand path for plain-http / iframe / older
+     *   browsers. Both branches end with a clear i18n message.
+     */
+    async copyText (txt) {
+      const value = String(txt == null ? '' : txt)
+      if (!value) return
+      const successMsg = this.$t('common.copySuccess')
+      const failMsg = this.$t('common.copyFailed')
+
+      let ok = false
       try {
-        const t = String(txt || '')
-        if (!t) return
-        this.$copyText(t)
-        this.$message.success(this.$t('common.copySuccess') || 'Copied')
-      } catch (e) {
-        this.$message.error(this.$t('common.copyFailed') || 'Copy failed')
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value)
+          ok = true
+        }
+      } catch (_) {
+        ok = false
+      }
+
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea')
+          ta.value = value
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.top = '-1000px'
+          ta.style.left = '-1000px'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.focus()
+          ta.select()
+          ok = document.execCommand && document.execCommand('copy')
+          document.body.removeChild(ta)
+        } catch (_) {
+          ok = false
+        }
+      }
+
+      if (ok) {
+        this.$message.success(successMsg)
+      } else {
+        this.$message.error(failMsg)
       }
     },
 

@@ -258,11 +258,37 @@ export default {
   multiTab: ${this.currentMultiTab},
   production: process.env.NODE_ENV === 'production' && process.env.VUE_APP_PREVIEW !== 'true'
 }`
-      this.$copyText(text).then(message => {
-        this.$message.success(this.$t('app.setting.copy.success'))
-      }).catch(() => {
-        this.$message.error(this.$t('app.setting.copy.fail'))
-      })
+      // Native clipboard with execCommand fallback (vue-clipboard2 was
+      // removed from the bundle — see package.json change history).
+      const okMsg = this.$t('app.setting.copy.success')
+      const failMsg = this.$t('app.setting.copy.fail')
+      const fallback = () => {
+        try {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.left = '-1000px'
+          ta.style.top = '-1000px'
+          ta.style.opacity = '0'
+          document.body.appendChild(ta)
+          ta.focus()
+          ta.select()
+          const ok = document.execCommand && document.execCommand('copy')
+          document.body.removeChild(ta)
+          if (ok) this.$message.success(okMsg)
+          else this.$message.error(failMsg)
+        } catch (_) {
+          this.$message.error(failMsg)
+        }
+      }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+          .then(() => this.$message.success(okMsg))
+          .catch(fallback)
+      } else {
+        fallback()
+      }
     },
     handleLayout (mode) {
       this.$emit('change', { type: 'layout', value: mode })
