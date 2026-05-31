@@ -1,17 +1,32 @@
 <template>
   <div class="trading-records strategy-tab-pane-inner" :class="{ 'theme-dark': isDark }">
-    <div v-if="records.length === 0 && !loading" class="empty-state strategy-tab-empty">
+    <div class="records-toolbar">
+      <div class="records-summary" v-if="unassignedSummary && unassignedSummary.count">
+        {{ $t('trading-assistant.records.unassignedSummary') }}:
+        {{ unassignedSummary.count }}
+        / {{ formatMoneyPlain(unassignedSummary.profit || 0) }}
+      </div>
+      <a-checkbox-group v-model="sourceFilter" class="source-filter">
+        <a-checkbox value="local">{{ $t('trading-assistant.records.sourceLocal') }}</a-checkbox>
+        <a-checkbox value="htx">{{ $t('trading-assistant.records.sourceHtx') }}</a-checkbox>
+        <a-checkbox value="htx_unassigned">{{ $t('trading-assistant.records.sourceHtxUnassigned') }}</a-checkbox>
+      </a-checkbox-group>
+      <a-button size="small" icon="sync" :loading="syncing" @click="handleSyncHtxTrades">
+        {{ $t('trading-assistant.records.syncHtx') }}
+      </a-button>
+    </div>
+    <div v-if="filteredRecords.length === 0 && !loading" class="empty-state strategy-tab-empty">
       <a-empty :description="$t('trading-assistant.table.noPositions')" />
     </div>
     <a-table
       v-else
       :columns="columns"
-      :data-source="records"
+      :data-source="filteredRecords"
       :loading="loading"
       :pagination="{ pageSize: 10 }"
       size="small"
       rowKey="id"
-      :scroll="{ x: 800 }"
+      :scroll="{ x: 860 }"
     >
       <template slot="type" slot-scope="text, record">
         <div class="trade-type-cell">
@@ -46,12 +61,17 @@
       <template slot="time" slot-scope="text, record">
         {{ formatTime(record.created_at || text) }}
       </template>
+      <template slot="source" slot-scope="text, record">
+        <a-tag :class="['source-tag', sourceClass(record)]">
+          {{ sourceText(record) }}
+        </a-tag>
+      </template>
     </a-table>
   </div>
 </template>
 
 <script>
-import { getStrategyTrades } from '@/api/strategy'
+import { getStrategyTrades, syncStrategyTrades } from '@/api/strategy'
 import { formatUserDateTime, formatBrowserLocalDateTime, getUserTimezoneFromStorage } from '@/utils/userTime'
 
 export default {
@@ -80,48 +100,52 @@ export default {
       const bt = String(this.botType || '').toLowerCase()
       return bt === 'grid' || bt === 'dca'
     },
+    filteredRecords () {
+      const selected = this.sourceFilter && this.sourceFilter.length ? this.sourceFilter : ['local', 'htx', 'htx_unassigned']
+      return this.records.filter(item => selected.includes(this.recordSourceKey(item)))
+    },
     columns () {
       const cols = [
         {
           title: this.$t('trading-assistant.table.time'),
           dataIndex: 'created_at',
           key: 'created_at',
-          width: 180,
+          width: 138,
           scopedSlots: { customRender: 'time' }
         },
         {
           title: this.$t('trading-assistant.table.typeAndAction'),
           dataIndex: 'type',
           key: 'type',
-          width: 220,
+          width: 170,
           scopedSlots: { customRender: 'type' }
         },
         {
           title: this.$t('trading-assistant.table.price'),
           dataIndex: 'price',
           key: 'price',
-          width: 120,
+          width: 92,
           scopedSlots: { customRender: 'price' }
         },
         {
           title: this.$t('trading-assistant.table.amount'),
           dataIndex: 'amount',
           key: 'amount',
-          width: 120,
+          width: 92,
           scopedSlots: { customRender: 'amount' }
         },
         {
           title: this.$t('trading-assistant.table.value'),
           dataIndex: 'value',
           key: 'value',
-          width: 120,
+          width: 92,
           scopedSlots: { customRender: 'value' }
         },
         {
           title: this.$t('dashboard.indicator.backtest.profit'),
           dataIndex: 'profit',
           key: 'profit',
-          width: 120,
+          width: 96,
           scopedSlots: { customRender: 'profit' }
         }
       ]
@@ -130,7 +154,7 @@ export default {
           title: this.$t('trading-assistant.table.gridMatchedProfit'),
           dataIndex: 'grid_matched_profit',
           key: 'grid_matched_profit',
-          width: 130,
+          width: 110,
           scopedSlots: { customRender: 'grid_matched_profit' }
         })
       }
@@ -138,36 +162,56 @@ export default {
         title: this.$t('trading-assistant.table.commission'),
         dataIndex: 'commission',
         key: 'commission',
-        width: 100,
+        width: 92,
         scopedSlots: { customRender: 'commission' }
+      })
+      cols.push({
+        title: this.$t('trading-assistant.table.source'),
+        dataIndex: 'source',
+        key: 'source',
+        width: 104,
+        scopedSlots: { customRender: 'source' }
       })
       return cols
     }
   },
   data () {
     return {
-      records: []
+      records: [],
+      unassignedSummary: null,
+      syncing: false,
+      sourceFilter: ['local', 'htx', 'htx_unassigned'],
+      autoSyncedStrategyId: null
     }
   },
   watch: {
     strategyId: {
       handler (val) {
         if (val) {
-          this.loadRecords()
+          this.loadRecords({ autoSync: true })
         }
       },
       immediate: true
     }
   },
   methods: {
-    async loadRecords () {
+    async loadRecords (options = {}) {
       if (!this.strategyId) return
 
       try {
-        const res = await getStrategyTrades(this.strategyId, this.$i18n && this.$i18n.locale)
+        if (options.autoSync && this.autoSyncedStrategyId !== this.strategyId) {
+          this.autoSyncedStrategyId = this.strategyId
+          await this.syncHtxTrades({ silent: true })
+        }
+        const res = await getStrategyTrades(this.strategyId, {
+          include_exchange: 1,
+          lang: this.$i18n && this.$i18n.locale
+        })
         if (res.code === 1) {
           const list = res.data.trades || res.data.items || []
-          this.records = list.map(trade => {
+          const unassigned = res.data.exchange_unassigned_trades || []
+          this.unassignedSummary = res.data.exchange_unassigned_summary || null
+          this.records = [...list, ...unassigned].map(trade => {
             const t = { ...trade }
             t.time = t.created_at || t.time
             const pr = this.pickTradeProfitRaw(t)
@@ -190,11 +234,45 @@ export default {
               t.value = price * amount
             }
             return t
-          })
+          }).sort((a, b) => Number(b.created_at || b.time || 0) - Number(a.created_at || a.time || 0))
         } else {
           this.$message.error(res.msg || this.$t('trading-assistant.messages.loadTradesFailed'))
         }
       } catch (error) {
+      }
+    },
+    async handleSyncHtxTrades () {
+      await this.syncHtxTrades({ reload: true })
+    },
+    async syncHtxTrades ({ silent = false, reload = false } = {}) {
+      if (!this.strategyId || this.syncing) return
+      this.syncing = true
+      try {
+        const res = await syncStrategyTrades(this.strategyId)
+        if (res.code === 1) {
+          const data = res.data || {}
+          const fetched = Array.isArray(data.market_results)
+            ? data.market_results.reduce((sum, item) => sum + (Number(item.fetched) || 0), 0)
+            : 0
+          if (!silent) {
+            this.$message.success(
+              this.$t('trading-assistant.records.syncHtxSuccess', {
+                fetched,
+                inserted: data.inserted || 0,
+                updated: data.updated || 0,
+                unassigned: data.unassigned || 0,
+                skipped: data.skipped || 0
+              })
+            )
+          }
+          if (reload) await this.loadRecords()
+        } else {
+          if (!silent) this.$message.error(res.msg || this.$t('trading-assistant.records.syncHtxFailed'))
+        }
+      } catch (error) {
+        if (!silent) this.$message.error(this.$t('trading-assistant.records.syncHtxFailed'))
+      } finally {
+        this.syncing = false
       }
     },
     formatTime (time) {
@@ -370,6 +448,12 @@ export default {
       const sign = value >= 0 ? '+' : '-'
       return `${sign}$${Math.abs(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     },
+    formatMoneyPlain (value) {
+      const num = parseFloat(value || 0)
+      if (isNaN(num)) return '$0.00'
+      const sign = num > 0 ? '+' : (num < 0 ? '-' : '')
+      return `${sign}$${Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    },
     // 格式化盈亏（处理信号模式下没有实盘的情况）
     formatProfit (record) {
       const net = this.netTradePnl(record)
@@ -430,6 +514,23 @@ export default {
         return '$0.00'
       }
       return `$${numValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+    },
+    sourceText (record) {
+      if (record && record.attribution_status === 'unassigned') {
+        return this.$t('trading-assistant.records.sourceHtxUnassigned')
+      }
+      if (record && record.source === 'htx') {
+        return this.$t('trading-assistant.records.sourceHtx')
+      }
+      return this.$t('trading-assistant.records.sourceLocal')
+    },
+    recordSourceKey (record) {
+      if (record && record.attribution_status === 'unassigned') return 'htx_unassigned'
+      if (record && record.source === 'htx') return 'htx'
+      return 'local'
+    },
+    sourceClass (record) {
+      return `source-${this.recordSourceKey(record)}`
     }
   }
 }
@@ -447,6 +548,27 @@ export default {
   padding: 0;
   overflow-x: visible;
   overflow-y: visible;
+
+  .records-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .records-summary {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  .source-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+  }
 
   .trade-type-cell {
     max-width: 280px;
@@ -617,12 +739,12 @@ export default {
     font-weight: 600;
     color: #475569;
     border-bottom: 2px solid #e2e8f0;
-    padding: 12px 16px;
-    font-size: 13px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   ::v-deep .ant-table-tbody > tr > td {
-    padding: 12px 16px;
+    padding: 8px 10px;
     color: #334155;
     border-bottom: 1px solid #f1f5f9;
     transition: background 0.2s ease;
@@ -686,6 +808,29 @@ export default {
     }
   }
 
+  ::v-deep .source-tag {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid transparent !important;
+  }
+
+  ::v-deep .source-local {
+    background: #111827 !important;
+    color: #ffffff !important;
+    border-color: #111827 !important;
+  }
+  ::v-deep .source-htx {
+    background: #0052cc !important;
+    color: #ffffff !important;
+    border-color: #003d99 !important;
+  }
+  ::v-deep .source-htx_unassigned {
+    background: #b45309 !important;
+    color: #ffffff !important;
+    border-color: #92400e !important;
+  }
   // 分页器美化
   ::v-deep .ant-pagination {
     margin-top: 16px;

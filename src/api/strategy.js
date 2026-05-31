@@ -15,6 +15,7 @@ const api = {
   batchDeleteStrategies: '/api/strategies/batch-delete',
   testConnection: '/api/strategies/test-connection',
   trades: '/api/strategies/trades',
+  tradesSync: '/api/strategies/trades/sync',
   positions: '/api/strategies/positions',
   equityCurve: '/api/strategies/equityCurve',
   dryRunDeviation: '/api/strategies/dry-run-deviation',
@@ -198,13 +199,26 @@ export function testExchangeConnection (exchangeConfig) {
  * 获取策略交易记录
  * @param {number} id - 策略ID
  */
-export function getStrategyTrades (id, lang) {
-  const params = { id }
-  if (lang) params.lang = lang
+export function getStrategyTrades (id, params = {}) {
+  if (typeof params === 'string') {
+    params = { lang: params }
+  }
   return request({
     url: api.trades,
     method: 'get',
-    params
+    params: { id, ...params }
+  })
+}
+
+/**
+ * 同步火币交易记录
+ * @param {number} id - 策略ID
+ */
+export function syncStrategyTrades (id) {
+  return request({
+    url: api.tradesSync,
+    method: 'post',
+    params: { id }
   })
 }
 
@@ -212,11 +226,11 @@ export function getStrategyTrades (id, lang) {
  * 获取策略持仓记录
  * @param {number} id - 策略ID
  */
-export function getStrategyPositions (id) {
+export function getStrategyPositions (id, params = {}) {
   return request({
     url: api.positions,
     method: 'get',
-    params: { id }
+    params: { id, ...params }
   })
 }
 

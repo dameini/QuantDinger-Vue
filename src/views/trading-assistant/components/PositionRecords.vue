@@ -1,17 +1,23 @@
 <template>
   <div class="position-records strategy-tab-pane-inner" :class="{ 'theme-dark': isDark }">
-    <div v-if="positions.length === 0 && !loading" class="empty-state strategy-tab-empty">
+    <div class="records-toolbar">
+      <a-checkbox-group v-model="sourceFilter" class="source-filter">
+        <a-checkbox value="local">{{ $t('trading-assistant.records.sourceLocal') }}</a-checkbox>
+        <a-checkbox value="htx">{{ $t('trading-assistant.records.sourceHtx') }}</a-checkbox>
+      </a-checkbox-group>
+    </div>
+    <div v-if="filteredPositions.length === 0 && !loading" class="empty-state strategy-tab-empty">
       <a-empty :description="$t('trading-assistant.table.noPositions')" />
     </div>
     <a-table
       v-else
       :columns="columns"
-      :data-source="positions"
+      :data-source="filteredPositions"
       :loading="loading"
       :pagination="false"
       size="small"
       rowKey="id"
-      :scroll="{ x: 800 }"
+      :scroll="{ x: 760 }"
     >
       <template slot="symbol" slot-scope="text, record">
         <strong>{{ record.symbol || text }}</strong>
@@ -47,6 +53,11 @@
           {{ parseFloat(record.pnl_percent || text || 0).toFixed(2) }}%
         </span>
       </template>
+      <template slot="source" slot-scope="text, record">
+        <a-tag :class="['source-tag', sourceClass(record)]">
+          {{ sourceText(record) }}
+        </a-tag>
+      </template>
     </a-table>
   </div>
 </template>
@@ -80,67 +91,80 @@ export default {
   },
   data () {
     return {
-      positions: []
+      positions: [],
+      sourceFilter: ['local', 'htx'],
+      lastExchangeSyncAt: 0
     }
   },
   computed: {
+    filteredPositions () {
+      const selected = this.sourceFilter && this.sourceFilter.length ? this.sourceFilter : ['local', 'htx']
+      return this.positions.filter(item => selected.includes(this.recordSourceKey(item)))
+    },
     columns () {
       return [
         {
           title: this.$t('trading-assistant.table.symbol'),
           dataIndex: 'symbol',
           key: 'symbol',
-          width: 120,
+          width: 106,
           scopedSlots: { customRender: 'symbol' }
         },
         {
           title: this.$t('trading-assistant.table.side'),
           dataIndex: 'side',
           key: 'side',
-          width: 80,
+          width: 72,
           scopedSlots: { customRender: 'side' }
         },
         {
           title: this.$t('trading-assistant.table.size'),
           dataIndex: 'size',
           key: 'size',
-          width: 120,
+          width: 96,
           scopedSlots: { customRender: 'size' }
         },
         {
           title: this.$t('trading-assistant.table.notional') || 'Value (USDT)',
           dataIndex: 'notional',
           key: 'notional',
-          width: 130,
+          width: 106,
           scopedSlots: { customRender: 'notional' }
         },
         {
           title: this.$t('trading-assistant.table.entryPrice'),
           dataIndex: 'entry_price',
           key: 'entry_price',
-          width: 120,
+          width: 96,
           scopedSlots: { customRender: 'entryPrice' }
         },
         {
           title: this.$t('trading-assistant.table.currentPrice'),
           dataIndex: 'current_price',
           key: 'current_price',
-          width: 120,
+          width: 96,
           scopedSlots: { customRender: 'currentPrice' }
         },
         {
           title: this.$t('trading-assistant.table.unrealizedPnl'),
           dataIndex: 'unrealized_pnl',
           key: 'unrealized_pnl',
-          width: 120,
+          width: 102,
           scopedSlots: { customRender: 'unrealizedPnl' }
         },
         {
           title: this.$t('trading-assistant.table.pnlPercent'),
           dataIndex: 'pnl_percent',
           key: 'pnl_percent',
-          width: 100,
+          width: 88,
           scopedSlots: { customRender: 'pnlPercent' }
+        },
+        {
+          title: this.$t('trading-assistant.table.source'),
+          dataIndex: 'source',
+          key: 'source',
+          width: 94,
+          scopedSlots: { customRender: 'source' }
         }
       ]
     }
@@ -149,6 +173,7 @@ export default {
     strategyId: {
       handler (val) {
         if (val) {
+          this.lastExchangeSyncAt = 0
           this.loadPositions()
           // 每5秒刷新一次持仓
           this.startPolling()
@@ -167,10 +192,19 @@ export default {
       if (!this.strategyId) return
 
       try {
-        const res = await getStrategyPositions(this.strategyId)
+        const now = Date.now()
+        const shouldSyncExchange = now - this.lastExchangeSyncAt > 30000
+        if (shouldSyncExchange) this.lastExchangeSyncAt = now
+        const res = await getStrategyPositions(this.strategyId, {
+          include_exchange: 1,
+          sync_exchange: shouldSyncExchange ? 1 : 0
+        })
         if (res.code === 1) {
           // 确保数据格式正确，处理可能的字段名不一致
-          const rawPositions = res.data.positions || []
+          const rawPositions = [
+            ...(res.data.positions || []),
+            ...(res.data.exchange_positions || [])
+          ]
 
           this.positions = rawPositions.map((position, index) => {
             const mt = String(this.marketType || 'swap').toLowerCase()
@@ -201,7 +235,9 @@ export default {
               current_price: position.current_price || position.currentPrice || '0',
               unrealized_pnl: position.unrealized_pnl || position.unrealizedPnl || '0',
               pnl_percent: pnlPercent,
-              updated_at: position.updated_at || position.updatedAt || ''
+              updated_at: position.updated_at || position.updatedAt || '',
+              source: position.source || 'local',
+              attribution_status: position.attribution_status || 'strategy'
             }
             return mapped
           })
@@ -224,6 +260,17 @@ export default {
       const ep = parseFloat(record.entry_price || 0)
       if (size > 0 && ep > 0) return size * ep
       return 0
+    },
+    recordSourceKey (record) {
+      return record && record.source === 'htx' ? 'htx' : 'local'
+    },
+    sourceText (record) {
+      return this.recordSourceKey(record) === 'htx'
+        ? this.$t('trading-assistant.records.sourceHtx')
+        : this.$t('trading-assistant.records.sourceLocal')
+    },
+    sourceClass (record) {
+      return `source-${this.recordSourceKey(record)}`
     },
     startPolling () {
       this.stopPolling()
@@ -251,6 +298,20 @@ export default {
   width: 100%;
   min-height: 300px;
   padding: 0;
+
+  .records-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .source-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+  }
 
   .empty-state {
     display: flex;
@@ -343,12 +404,12 @@ export default {
     font-weight: 600;
     color: #475569;
     border-bottom: 2px solid #e2e8f0;
-    padding: 12px 16px;
-    font-size: 13px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   ::v-deep .ant-table-tbody > tr > td {
-    padding: 12px 16px;
+    padding: 8px 10px;
     color: #334155;
     border-bottom: 1px solid #f1f5f9;
     transition: background 0.2s ease;
@@ -386,6 +447,24 @@ export default {
     }
   }
 
+  ::v-deep .source-tag {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    border: 1px solid transparent !important;
+  }
+
+  ::v-deep .source-local {
+    background: #111827 !important;
+    color: #ffffff !important;
+    border-color: #111827 !important;
+  }
+  ::v-deep .source-htx {
+    background: #0052cc !important;
+    color: #ffffff !important;
+    border-color: #003d99 !important;
+  }
   // 暗黑主题适配
   &.theme-dark,
   .theme-dark & {
