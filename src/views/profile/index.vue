@@ -266,6 +266,11 @@
               </div>
             </a-tab-pane>
 
+            <!-- My Agent Token -->
+            <a-tab-pane key="agentTokens" :tab="$t('profile.agentTokens.tab') || '我的 Agent Token'">
+              <profile-agent-tokens :is-dark-theme="isDarkTheme" />
+            </a-tab-pane>
+
             <!-- Change Password Tab -->
             <a-tab-pane key="password" :tab="$t('profile.changePassword') || 'Change Password'">
               <a-form :form="passwordForm" layout="vertical" class="password-form">
@@ -675,11 +680,12 @@ import { baseMixin } from '@/store/app-mixin'
 import ExchangeAccountModal from '@/components/ExchangeAccountModal/ExchangeAccountModal.vue'
 import ExchangeSignupModal from '@/components/ExchangeSignupModal/ExchangeSignupModal.vue'
 import RenameCredentialModal from '@/components/RenameCredentialModal/RenameCredentialModal.vue'
+import ProfileAgentTokens from '@/views/profile/components/ProfileAgentTokens.vue'
 import { formatBrowserLocalDateTime } from '@/utils/userTime'
 
 export default {
   name: 'Profile',
-  components: { ExchangeAccountModal, ExchangeSignupModal, RenameCredentialModal },
+  components: { ExchangeAccountModal, ExchangeSignupModal, RenameCredentialModal, ProfileAgentTokens },
   mixins: [baseMixin],
   data () {
     return {

@@ -281,6 +281,20 @@ export function getSystemStrategies (params) {
 }
 
 /**
+ * Admin: start/stop any strategy (admin only)
+ * @param {Number} strategyId
+ * @param {String} action - optional: 'start' | 'stop' (omit to toggle)
+ */
+export function adminToggleStrategy (strategyId, action) {
+  return request({
+    url: '/api/users/system-strategies/toggle',
+    method: 'post',
+    params: { id: strategyId },
+    data: action ? { action } : {}
+  })
+}
+
+/**
  * Get all orders across the system (admin only)
  * @param {Object} params - { page, page_size, status, search }
  */

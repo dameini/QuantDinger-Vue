@@ -63,6 +63,24 @@
       </a-radio-group>
       <div class="direction-hint">{{ directionHint }}</div>
     </a-form-model-item>
+    <a-form-model-item
+      v-if="form.gridDirection === 'long' || form.gridDirection === 'short'"
+      :label="$t('trading-bot.grid.initialPositionPct')"
+      prop="initialPositionPct"
+    >
+      <a-input-number
+        v-model="form.initialPositionPct"
+        :min="0"
+        :max="100"
+        :step="5"
+        style="width: 100%"
+        :formatter="v => `${v}%`"
+        :parser="v => v.replace('%', '')"
+        @change="emit"
+      />
+      <div class="direction-hint">{{ $t('trading-bot.grid.initialPositionPctHint') }}</div>
+      <div v-if="initialCapitalHint" class="direction-hint">{{ initialCapitalHint }}</div>
+    </a-form-model-item>
     <a-form-model-item :label="$t('trading-bot.grid.orderType')">
       <a-radio-group v-model="form.orderMode" @change="emit">
         <a-radio value="maker">{{ $t('trading-bot.grid.limitOrder') }}</a-radio>
@@ -72,6 +90,14 @@
     </a-form-model-item>
 
     <a-divider>{{ $t('trading-bot.grid.riskGuardsTitle') }}</a-divider>
+    <a-form-model-item :label="$t('trading-bot.grid.boundaryAction')">
+      <a-select v-model="form.boundaryAction" style="width: 100%" @change="emit">
+        <a-select-option value="pause">{{ $t('trading-bot.grid.boundaryPause') }}</a-select-option>
+        <a-select-option value="stop_loss">{{ $t('trading-bot.grid.boundaryStopLoss') }}</a-select-option>
+        <a-select-option value="hold">{{ $t('trading-bot.grid.boundaryHold') }}</a-select-option>
+      </a-select>
+      <div class="direction-hint">{{ $t('trading-bot.grid.boundaryActionHint') }}</div>
+    </a-form-model-item>
     <a-form-model-item :label="$t('trading-bot.grid.adaptiveBounds')">
       <a-switch v-model="form.adaptiveBounds" @change="emit" />
       <div class="direction-hint">{{ $t('trading-bot.grid.adaptiveBoundsHint') }}</div>
@@ -142,7 +168,9 @@ export default {
         gridCount: this.value.gridCount || 10,
         amountPerGrid: this.value.amountPerGrid || null,
         gridMode: this.value.gridMode || 'arithmetic',
-        gridDirection: this.value.gridDirection || 'neutral',
+        gridDirection: this.value.gridDirection || 'long',
+        initialPositionPct: this.value.initialPositionPct != null ? Number(this.value.initialPositionPct) : 0,
+        boundaryAction: this.value.boundaryAction || 'pause',
         orderMode: this.value.orderMode || 'maker',
         adaptiveBounds: this.value.adaptiveBounds !== false,
         adaptiveAtrMult: this.value.adaptiveAtrMult != null ? this.value.adaptiveAtrMult : 2,
@@ -163,7 +191,8 @@ export default {
         amountPerGrid: [
           { required: true, message: this.$t('trading-bot.grid.amountReq'), trigger: 'change' },
           { validator: this.validateAmountPerGrid, trigger: 'change' }
-        ]
+        ],
+        initialPositionPct: [{ validator: this.validateInitialPositionPct, trigger: 'change' }]
       }
     }
   },
@@ -196,16 +225,18 @@ export default {
     },
     gridSpacing () {
       if (!this.form.upperPrice || !this.form.lowerPrice || !this.form.gridCount) return '-'
+      const intervals = Math.max(1, Number(this.form.gridCount) - 1)
       if (this.form.gridMode === 'geometric' && this.form.lowerPrice > 0) {
-        const ratio = Math.pow(this.form.upperPrice / this.form.lowerPrice, 1 / this.form.gridCount)
+        const ratio = Math.pow(this.form.upperPrice / this.form.lowerPrice, 1 / intervals)
         return `${((ratio - 1) * 100).toFixed(2)}%`
       }
-      const spacing = ((this.form.upperPrice - this.form.lowerPrice) / this.form.gridCount).toFixed(4)
+      const spacing = ((this.form.upperPrice - this.form.lowerPrice) / intervals).toFixed(4)
       return `$${spacing}`
     },
     totalInvestment () {
       if (!this.form.amountPerGrid || !this.form.gridCount) return '0'
-      return (this.form.amountPerGrid * this.form.gridCount).toLocaleString('en-US', { minimumFractionDigits: 2 })
+      const cells = Math.max(1, Number(this.form.gridCount) - 1)
+      return (this.form.amountPerGrid * cells).toLocaleString('en-US', { minimumFractionDigits: 2 })
     },
     directionHint () {
       if (this.isSpotMarket) return 'Spot grid only supports long mode.'
@@ -218,8 +249,14 @@ export default {
     },
     orderModeHint () {
       return this.form.orderMode === 'maker'
-        ? this.$t('trading-bot.grid.limitOrderHint')
+        ? this.$t('trading-bot.grid.limitOrderHintResting')
         : this.$t('trading-bot.grid.marketOrderHint')
+    },
+    initialCapitalHint () {
+      const pct = Number(this.form.initialPositionPct) || 0
+      if (!pct || !this.initialCapital) return ''
+      const usdt = (this.initialCapital * pct / 100).toFixed(2)
+      return this.$t('trading-bot.grid.initialPositionUsdtHint', { usdt, pct })
     }
   },
   methods: {
@@ -260,6 +297,19 @@ export default {
       }
       callback()
     },
+    validateInitialPositionPct (rule, value, callback) {
+      const n = Number(value)
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        return callback(new Error(this.$t('trading-bot.grid.initialPositionPctInvalid')))
+      }
+      if (this.initialCapital && n > 0) {
+        const initUsdt = this.initialCapital * n / 100
+        if (this.form.amountPerGrid && initUsdt < this.form.amountPerGrid * 0.5) {
+          return callback(new Error(this.$t('trading-bot.grid.initialPositionTooSmall')))
+        }
+      }
+      callback()
+    },
     emit () {
       const payload = {
         ...this.form,
@@ -267,6 +317,8 @@ export default {
           ? Number(this.form.waterfallDropPct || 3) / 100
           : undefined
       }
+      delete payload.gridExecutionMode
+      delete payload.grid_execution_mode
       this.$emit('input', payload)
       this.$emit('change', payload)
     },
@@ -302,7 +354,25 @@ export default {
     font-size: 13px;
 
     .label { color: #8c8c8c; }
-    .value { font-weight: 600; color: #262626; }
+    .value { font-weight: 600; color: rgba(0, 0, 0, 0.85); }
+  }
+
+  body.dark &,
+  body.realdark & {
+    background: rgba(24, 144, 255, 0.08);
+    border-color: rgba(24, 144, 255, 0.35);
+
+    .summary-item {
+      .label { color: rgba(255, 255, 255, 0.45); }
+      .value { color: rgba(255, 255, 255, 0.85); }
+    }
+  }
+}
+
+body.dark,
+body.realdark {
+  .direction-hint {
+    color: rgba(255, 255, 255, 0.45);
   }
 }
 </style>

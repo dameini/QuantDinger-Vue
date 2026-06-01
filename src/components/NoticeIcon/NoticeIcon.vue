@@ -30,8 +30,8 @@
                 <a-icon :type="getNoticeIcon(item.signal_type)" :style="{ color: getNoticeColor(item.signal_type) }" />
               </div>
               <div class="notice-item-content">
-                <div class="notice-item-title">{{ item.title }}</div>
-                <div class="notice-item-desc">{{ truncateMessage(item.message) }}</div>
+                <div class="notice-item-title">{{ displayTitle(item) }}</div>
+                <div class="notice-item-desc">{{ displayPreview(item) }}</div>
                 <div class="notice-item-time">{{ formatTime(item.created_at) }}</div>
               </div>
             </div>
@@ -54,7 +54,7 @@
     <!-- 通知详情弹窗 -->
     <a-modal
       v-model="detailVisible"
-      :title="detailNotice ? detailNotice.title : ''"
+      :title="detailNotice ? displayTitle(detailNotice) : ''"
       :footer="null"
       :width="isHtmlReport ? 900 : 600"
       :wrapClassName="isHtmlReport ? 'notice-detail-modal html-report-modal' : 'notice-detail-modal'"
@@ -64,7 +64,7 @@
         <div class="notice-detail-meta">
           <div class="notice-detail-type">
             <a-icon :type="getNoticeIcon(detailNotice.signal_type)" :style="{ color: getNoticeColor(detailNotice.signal_type) }" />
-            <span class="type-label">{{ getNoticeTypeLabel(detailNotice.signal_type) }}</span>
+            <span class="type-label">{{ displayTypeLabel(detailNotice.signal_type) }}</span>
           </div>
           <div class="notice-detail-time">
             <a-icon type="clock-circle" />
@@ -76,7 +76,7 @@
 
         <!-- 消息内容 - 支持 HTML 报告或 Markdown 格式 -->
         <div class="notice-detail-content" :class="{ 'html-report': isHtmlReport }">
-          <div v-html="formatMessageHtml(detailNotice.message)" class="message-body"></div>
+          <div v-html="displayMessageHtml(detailNotice)" class="message-body"></div>
         </div>
 
         <!-- 如果有额外的 payload 信息（非 HTML 报告时显示） -->
@@ -156,6 +156,12 @@
 <script>
 import { getStrategyNotifications, getUnreadNotificationCount } from '@/api/strategy'
 import request from '@/utils/request'
+import {
+  noticeTitle,
+  noticePreview,
+  noticeMessageHtml,
+  noticeTypeLabel
+} from '@/utils/noticeFormat'
 
 export default {
   name: 'HeaderNotice',
@@ -176,9 +182,9 @@ export default {
       return Number(this.unreadTotal || 0)
     },
     isHtmlReport () {
-      if (!this.detailNotice || !this.detailNotice.message) return false
-      return this.detailNotice.message.includes('<div class="qd-report">') ||
-             this.detailNotice.message.includes('<style>')
+      if (!this.detailNotice) return false
+      const html = this.displayMessageHtml(this.detailNotice)
+      return html.includes('<div class="qd-report">') || html.includes('<style>')
     }
   },
   mounted () {
@@ -266,7 +272,9 @@ export default {
         'buy': 'rise',
         'sell': 'fall',
         'hold': 'pause-circle',
-        'trade': 'swap'
+        'trade': 'swap',
+        'security_login': 'safety-certificate',
+        'profile_test': 'experiment'
       }
       return iconMap[signalType] || 'notification'
     },
@@ -278,21 +286,23 @@ export default {
         'buy': '#52c41a',
         'sell': '#f5222d',
         'hold': '#faad14',
-        'trade': '#13c2c2'
+        'trade': '#13c2c2',
+        'security_login': '#fa541c',
+        'profile_test': '#2f54eb'
       }
       return colorMap[signalType] || '#1890ff'
     },
-    getNoticeTypeLabel (signalType) {
-      const labelMap = {
-        'ai_monitor': this.$t('notice.type.aiMonitor'),
-        'price_alert': this.$t('notice.type.priceAlert'),
-        'signal': this.$t('notice.type.signal'),
-        'buy': this.$t('notice.type.buy'),
-        'sell': this.$t('notice.type.sell'),
-        'hold': this.$t('notice.type.hold'),
-        'trade': this.$t('notice.type.trade')
-      }
-      return labelMap[signalType] || this.$t('notice.type.notification')
+    displayTitle (item) {
+      return noticeTitle(item, (key, params) => this.$t(key, params))
+    },
+    displayPreview (item) {
+      return noticePreview(item, (key, params) => this.$t(key, params))
+    },
+    displayMessageHtml (item) {
+      return noticeMessageHtml(item, (key, params) => this.$t(key, params))
+    },
+    displayTypeLabel (signalType) {
+      return noticeTypeLabel(signalType, (key, params) => this.$t(key, params))
     },
     getDecisionColor (decision) {
       const colorMap = {
@@ -301,10 +311,6 @@ export default {
         'HOLD': 'orange'
       }
       return colorMap[decision] || 'blue'
-    },
-    truncateMessage (message) {
-      if (!message) return ''
-      return message.length > 80 ? message.substring(0, 80) + '...' : message
     },
     formatTime (timestamp) {
       if (!timestamp) return ''
@@ -371,35 +377,6 @@ export default {
         return ''
       }
       return date.toLocaleString()
-    },
-    formatMessageHtml (message) {
-      if (!message) return ''
-
-      // 检查是否已经是 HTML 格式（AI Monitor 的报告）
-      if (message.includes('<div class="qd-report">') || message.includes('<style>')) {
-        // 已经是 HTML，直接返回
-        return message
-      }
-
-      // 简单的 Markdown 转换
-      const html = message
-        // 转义 HTML
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        // 标题
-        .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-        .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-        .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-        // 粗体
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        // 斜体
-        .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        // 列表项
-        .replace(/^- (.+)$/gm, '<li>$1</li>')
-        // 换行
-        .replace(/\n/g, '<br>')
-      return html
     },
     handleNoticeClick (item) {
       // 标记为已读

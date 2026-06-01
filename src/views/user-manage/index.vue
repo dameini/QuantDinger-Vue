@@ -9,7 +9,7 @@
     </div>
 
     <!-- Tabs -->
-    <a-tabs v-model="activeTab" @change="handleTabChange" class="manage-tabs">
+    <a-tabs :activeKey="activeTab" @change="handleTabChange" class="manage-tabs">
       <!-- Tab 1: User Management -->
       <a-tab-pane key="users" :tab="$t('userManage.tabUsers') || 'User Management'">
         <!-- KPI Cards (operations-at-a-glance) -->
@@ -141,16 +141,34 @@
               {{ $t('common.refresh') || 'Refresh' }}
             </a-button>
           </div>
-          <div class="toolbar-right">
+          <div class="toolbar-right toolbar-filters">
+            <a-input
+              v-model="userIdSearch"
+              class="toolbar-id-input"
+              :placeholder="$t('userManage.searchById') || 'User ID'"
+              allowClear
+              @pressEnter="handleSearch"
+            />
             <a-input-search
               v-model="searchKeyword"
               class="toolbar-search"
-              :placeholder="$t('userManage.searchPlaceholder') || 'Search by username/email'"
+              :placeholder="$t('userManage.searchPlaceholder') || 'Search username/email/nickname/ID'"
               allowClear
               @search="handleSearch"
-              @pressEnter="handleSearch"
             />
+            <a-button v-if="hasUserFilters" @click="clearUserFilters">
+              {{ $t('systemOverview.clearFilters') || 'Clear' }}
+            </a-button>
           </div>
+        </div>
+        <div v-if="hasUserFilters" class="active-filters">
+          <span class="active-filters-label">{{ $t('systemOverview.activeFilters') || 'Active filters' }}:</span>
+          <a-tag v-if="normalizePositiveInt(userIdSearch)" closable @close="clearUserIdFilter">
+            {{ $t('userManage.searchById') || 'User ID' }}: {{ normalizePositiveInt(userIdSearch) }}
+          </a-tag>
+          <a-tag v-if="searchKeyword" closable @close="clearUserKeywordFilter">
+            {{ $t('systemOverview.filterKeyword') || 'Keyword' }}: {{ searchKeyword }}
+          </a-tag>
         </div>
 
         <!-- User Table -->
@@ -252,6 +270,11 @@
                     <a-icon type="key" />
                   </a-button>
                 </a-tooltip>
+                <a-tooltip :title="$t('systemOverview.viewUserStrategies') || 'View strategies'">
+                  <a-button type="link" size="small" @click.stop="filterStrategiesByUser(record.id)">
+                    <a-icon type="bar-chart" style="color: #1890ff" />
+                  </a-button>
+                </a-tooltip>
                 <a-tooltip :title="$t('common.delete') || 'Delete'">
                   <a-popconfirm
                     :title="$t('userManage.confirmDelete') || 'Are you sure to delete this user?'"
@@ -268,8 +291,8 @@
         </a-card>
       </a-tab-pane>
 
-      <!-- Tab 2: System Strategy Overview -->
-      <a-tab-pane key="strategies" :tab="$t('systemOverview.tabTitle') || 'System Overview'">
+      <!-- Tab 2: System Strategy Overview (forceRender keeps pane mounted for programmatic filters) -->
+      <a-tab-pane key="strategies" forceRender :tab="$t('systemOverview.tabTitle') || 'System Overview'">
         <!-- Summary Cards -->
         <div class="summary-cards" v-if="strategySummary">
           <div class="summary-card">
@@ -346,16 +369,54 @@
               <a-select-option value="signal">{{ $t('systemOverview.signal') || 'Signal' }}</a-select-option>
             </a-select>
           </div>
-          <div class="toolbar-right">
+          <div class="toolbar-right toolbar-filters">
+            <a-input
+              v-model="strategyIdSearch"
+              class="toolbar-id-input"
+              :placeholder="$t('systemOverview.searchStrategyId') || 'Strategy ID'"
+              allowClear
+              @pressEnter="handleStrategySearch"
+            />
+            <a-input
+              v-model="strategyUserIdSearch"
+              class="toolbar-id-input"
+              :placeholder="$t('systemOverview.searchUserId') || 'User ID'"
+              allowClear
+              @pressEnter="handleStrategySearch"
+            />
             <a-input-search
               v-model="strategySearchKeyword"
               class="toolbar-search"
-              :placeholder="$t('systemOverview.searchPlaceholder') || 'Search strategy/symbol/user'"
+              :placeholder="$t('systemOverview.searchPlaceholder') || 'Search strategy/symbol/user/ID'"
               allowClear
               @search="handleStrategySearch"
-              @pressEnter="handleStrategySearch"
             />
+            <a-button type="primary" @click="handleStrategySearch">
+              <a-icon type="search" />
+              {{ $t('systemOverview.applyFilters') || 'Search' }}
+            </a-button>
+            <a-button v-if="hasStrategyFilters" @click="clearStrategyFilters">
+              {{ $t('systemOverview.clearFilters') || 'Clear' }}
+            </a-button>
           </div>
+        </div>
+        <div v-if="hasStrategyFilters" class="active-filters">
+          <span class="active-filters-label">{{ $t('systemOverview.activeFilters') || 'Active filters' }}:</span>
+          <a-tag v-if="normalizePositiveInt(strategyIdSearch)" closable @close="clearStrategyIdFilter">
+            {{ $t('systemOverview.searchStrategyId') || 'Strategy ID' }}: {{ normalizePositiveInt(strategyIdSearch) }}
+          </a-tag>
+          <a-tag v-if="normalizePositiveInt(strategyUserIdSearch)" closable @close="clearStrategyUserIdFilter">
+            {{ $t('systemOverview.searchUserId') || 'User ID' }}: {{ normalizePositiveInt(strategyUserIdSearch) }}
+          </a-tag>
+          <a-tag v-if="strategySearchKeyword" closable @close="clearStrategyKeywordFilter">
+            {{ $t('systemOverview.filterKeyword') || 'Keyword' }}: {{ strategySearchKeyword }}
+          </a-tag>
+          <a-tag v-if="strategyStatusFilter !== 'all'" closable @close="clearStrategyStatusFilter">
+            {{ $t('systemOverview.colStatus') || 'Status' }}: {{ strategyStatusFilter }}
+          </a-tag>
+          <a-tag v-if="strategyExecutionFilter !== 'all'" closable @close="clearStrategyExecutionFilter">
+            {{ $t('systemOverview.colExecutionMode') || 'Mode' }}: {{ strategyExecutionFilter }}
+          </a-tag>
         </div>
 
         <!-- Strategy Table -->
@@ -366,9 +427,28 @@
             :loading="strategyLoading"
             :pagination="strategyPagination"
             :rowKey="record => record.id"
-            :scroll="{ x: 1920 }"
+            :scroll="{ x: 2100 }"
             @change="handleStrategyTableChange"
           >
+            <!-- Strategy ID -->
+            <template slot="strategyId" slot-scope="text, record">
+              <span class="id-cell">
+                <span class="mono-id">{{ text }}</span>
+                <a-tooltip :title="$t('common.copy') || 'Copy'">
+                  <a-button type="link" size="small" class="id-copy-btn" @click="copyText(text)">
+                    <a-icon type="copy" />
+                  </a-button>
+                </a-tooltip>
+              </span>
+            </template>
+
+            <!-- Owner user id -->
+            <template slot="ownerUserId" slot-scope="text, record">
+              <a-button type="link" size="small" class="link-id-btn" @click.stop="filterStrategiesByUser(record.user_id)">
+                {{ text }}
+              </a-button>
+            </template>
+
             <!-- Strategy Status -->
             <template slot="strategyStatus" slot-scope="text">
               <span class="status-cell">
@@ -478,6 +558,30 @@
             <template slot="updatedAtInfo" slot-scope="text">
               <span v-if="text">{{ formatTime(text) }}</span>
               <span v-else class="text-muted">-</span>
+            </template>
+
+            <!-- Actions: start/stop -->
+            <template slot="strategyActions" slot-scope="text, record">
+              <a-space size="small">
+                <a-tooltip
+                  :title="record.status === 'running'
+                    ? ($t('systemOverview.stopStrategy') || 'Stop strategy')
+                    : ($t('systemOverview.startStrategy') || 'Start strategy')"
+                >
+                  <a-switch
+                    :checked="record.status === 'running'"
+                    :loading="strategyTogglingId === record.id"
+                    :checked-children="$t('systemOverview.switchOn') || 'On'"
+                    :un-checked-children="$t('systemOverview.switchOff') || 'Off'"
+                    @change="(checked) => handleStrategyToggle(record, checked)"
+                  />
+                </a-tooltip>
+                <a-tooltip :title="$t('systemOverview.viewUserStrategies') || 'View user strategies'">
+                  <a-button type="link" size="small" @click.stop="filterStrategiesByUser(record.user_id)">
+                    <a-icon type="user" />
+                  </a-button>
+                </a-tooltip>
+              </a-space>
             </template>
           </a-table>
         </a-card>
@@ -1058,7 +1162,7 @@
 </template>
 
 <script>
-import { getUserList, exportUsers, createUser, updateUser, deleteUser, resetUserPassword, getRoles, setUserCredits, setUserVip, getSystemStrategies, getAdminOrders, manualConfirmOrder, getAdminAiStats, getUserAdminStats } from '@/api/user'
+import { getUserList, exportUsers, createUser, updateUser, deleteUser, resetUserPassword, getRoles, setUserCredits, setUserVip, getSystemStrategies, adminToggleStrategy, getAdminOrders, manualConfirmOrder, getAdminAiStats, getUserAdminStats } from '@/api/user'
 import { baseMixin } from '@/store/app-mixin'
 import { mapGetters } from 'vuex'
 import * as echarts from 'echarts'
@@ -1075,6 +1179,7 @@ export default {
       users: [],
       roles: [],
       searchKeyword: '',
+      userIdSearch: '',
       pagination: {
         current: 1,
         pageSize: 10,
@@ -1121,6 +1226,9 @@ export default {
       strategySortBy: '',
       strategySortOrder: 'desc',
       strategySearchKeyword: '',
+      strategyIdSearch: '',
+      strategyUserIdSearch: '',
+      strategyTogglingId: null,
       strategyPagination: {
         current: 1,
         pageSize: 20,
@@ -1208,6 +1316,18 @@ export default {
       const label = this.$t('userManage.kpiYesterday') || 'Yesterday'
       return `${label}: ${this.formatNumber(y)}`
     },
+    hasUserFilters () {
+      return !!(this.normalizePositiveInt(this.userIdSearch) || String(this.searchKeyword || '').trim())
+    },
+    hasStrategyFilters () {
+      return !!(
+        this.normalizePositiveInt(this.strategyIdSearch) ||
+        this.normalizePositiveInt(this.strategyUserIdSearch) ||
+        String(this.strategySearchKeyword || '').trim() ||
+        this.strategyStatusFilter !== 'all' ||
+        this.strategyExecutionFilter !== 'all'
+      )
+    },
     columns () {
       return [
         {
@@ -1270,7 +1390,7 @@ export default {
         {
           title: this.$t('common.actions') || 'Actions',
           dataIndex: 'action',
-          width: 180,
+          width: 220,
           scopedSlots: { customRender: 'action' }
         }
       ]
@@ -1283,10 +1403,19 @@ export default {
           title: 'ID',
           dataIndex: 'id',
           key: 'id',
-          width: 72,
+          width: 96,
           fixed: 'left',
+          scopedSlots: { customRender: 'strategyId' },
           sorter: true,
           sortOrder: so('id')
+        },
+        {
+          title: this.$t('systemOverview.colUserId') || 'User ID',
+          dataIndex: 'user_id',
+          key: 'user_id',
+          width: 88,
+          fixed: 'left',
+          scopedSlots: { customRender: 'ownerUserId' }
         },
         {
           title: this.$t('systemOverview.colUser') || 'User',
@@ -1430,6 +1559,13 @@ export default {
           scopedSlots: { customRender: 'updatedAtInfo' },
           sorter: true,
           sortOrder: so('updated_at')
+        },
+        {
+          title: this.$t('common.actions') || 'Actions',
+          key: 'actions',
+          width: 120,
+          fixed: 'right',
+          scopedSlots: { customRender: 'strategyActions' }
         }
       ]
     },
@@ -1609,6 +1745,7 @@ export default {
   },
   methods: {
     handleTabChange (key) {
+      this.activeTab = key
       if (key === 'strategies' && !this.strategiesLoaded) {
         this.loadSystemStrategies()
       }
@@ -1621,24 +1758,61 @@ export default {
     },
 
     // ==================== System Strategy Overview ====================
-    async loadSystemStrategies () {
+    normalizePositiveInt (raw) {
+      if (raw == null || raw === '') return undefined
+      const n = parseInt(String(raw).trim(), 10)
+      return Number.isFinite(n) && n > 0 ? n : undefined
+    },
+
+    buildStrategyQueryParams () {
+      const params = {
+        page: this.strategyPagination.current,
+        page_size: this.strategyPagination.pageSize,
+        status: this.strategyStatusFilter === 'all' ? '' : this.strategyStatusFilter,
+        execution_mode: this.strategyExecutionFilter === 'all' ? '' : this.strategyExecutionFilter,
+        search: String(this.strategySearchKeyword || '').trim()
+      }
+      const sid = this.normalizePositiveInt(this.strategyIdSearch)
+      const uid = this.normalizePositiveInt(this.strategyUserIdSearch)
+      if (sid) params.strategy_id = sid
+      if (uid) params.user_id = uid
+      if (this.strategySortBy) {
+        params.sort_by = this.strategySortBy
+        params.sort_order = this.strategySortOrder
+      }
+      return params
+    },
+
+    buildUserQueryParams () {
+      const params = {
+        page: this.pagination.current,
+        page_size: this.pagination.pageSize,
+        search: String(this.searchKeyword || '').trim()
+      }
+      const uid = this.normalizePositiveInt(this.userIdSearch)
+      if (uid) params.user_id = uid
+      return params
+    },
+
+    async loadSystemStrategies (retryOnEmptyPage = true) {
       this.strategyLoading = true
       try {
-        const params = {
-          page: this.strategyPagination.current,
-          page_size: this.strategyPagination.pageSize,
-          status: this.strategyStatusFilter === 'all' ? '' : this.strategyStatusFilter,
-          execution_mode: this.strategyExecutionFilter === 'all' ? '' : this.strategyExecutionFilter,
-          search: this.strategySearchKeyword || ''
-        }
-        if (this.strategySortBy) {
-          params.sort_by = this.strategySortBy
-          params.sort_order = this.strategySortOrder
-        }
-        const res = await getSystemStrategies(params)
+        const res = await getSystemStrategies(this.buildStrategyQueryParams())
         if (res.code === 1) {
-          this.systemStrategies = res.data.items || []
-          this.strategyPagination.total = res.data.total || 0
+          const items = res.data.items || []
+          const total = res.data.total || 0
+          if (
+            retryOnEmptyPage &&
+            items.length === 0 &&
+            total > 0 &&
+            this.strategyPagination.current > 1
+          ) {
+            this.strategyPagination.current = 1
+            await this.loadSystemStrategies(false)
+            return
+          }
+          this.systemStrategies = items
+          this.strategyPagination.total = total
           this.strategySummary = res.data.summary || {}
           this.strategiesLoaded = true
         } else {
@@ -1683,6 +1857,157 @@ export default {
         }
       }
       this.loadSystemStrategies()
+    },
+
+    filterStrategiesByUser (userId) {
+      const uid = this.normalizePositiveInt(userId)
+      if (!uid) {
+        this.$message.warning(this.$t('systemOverview.invalidUserId') || 'Invalid user ID')
+        return
+      }
+      this.strategyUserIdSearch = String(uid)
+      this.strategyIdSearch = ''
+      this.strategySearchKeyword = ''
+      this.strategyPagination.current = 1
+      this.activeTab = 'strategies'
+      this.$nextTick(() => {
+        this.loadSystemStrategies()
+        this.$message.success(
+          this.$t('systemOverview.filteredByUser', { id: uid }) || `Showing strategies for user #${uid}`
+        )
+        const tabsEl = this.$el && this.$el.querySelector('.manage-tabs')
+        if (tabsEl && typeof tabsEl.scrollIntoView === 'function') {
+          tabsEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      })
+    },
+
+    clearStrategyFilters () {
+      this.strategyIdSearch = ''
+      this.strategyUserIdSearch = ''
+      this.strategySearchKeyword = ''
+      this.strategyStatusFilter = 'all'
+      this.strategyExecutionFilter = 'all'
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearStrategyIdFilter () {
+      this.strategyIdSearch = ''
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearStrategyUserIdFilter () {
+      this.strategyUserIdSearch = ''
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearStrategyKeywordFilter () {
+      this.strategySearchKeyword = ''
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearStrategyStatusFilter () {
+      this.strategyStatusFilter = 'all'
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearStrategyExecutionFilter () {
+      this.strategyExecutionFilter = 'all'
+      this.strategyPagination.current = 1
+      this.loadSystemStrategies()
+    },
+
+    clearUserFilters () {
+      this.userIdSearch = ''
+      this.searchKeyword = ''
+      this.pagination.current = 1
+      this.loadUsers()
+    },
+
+    clearUserIdFilter () {
+      this.userIdSearch = ''
+      this.pagination.current = 1
+      this.loadUsers()
+    },
+
+    clearUserKeywordFilter () {
+      this.searchKeyword = ''
+      this.pagination.current = 1
+      this.loadUsers()
+    },
+
+    copyText (text) {
+      const val = String(text == null ? '' : text).trim()
+      if (!val) return
+      const done = () => this.$message.success(this.$t('common.copySuccess') || 'Copied')
+      const fail = () => this.$message.error(this.$t('common.copyFailed') || 'Copy failed')
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(done).catch(fail)
+        return
+      }
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = val
+        ta.style.position = 'fixed'
+        ta.style.left = '-9999px'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        document.body.removeChild(ta)
+        done()
+      } catch (e) {
+        fail()
+      }
+    },
+
+    handleStrategyToggle (record, checked) {
+      const wantRun = !!checked
+      const action = wantRun ? 'start' : 'stop'
+      const runToggle = async () => {
+        this.strategyTogglingId = record.id
+        try {
+          const res = await adminToggleStrategy(record.id, action)
+          if (res && res.code === 1) {
+            const newStatus = (res.data && res.data.status) || (wantRun ? 'running' : 'stopped')
+            record.status = newStatus
+            this.$message.success(res.msg || 'OK')
+            await this.loadSystemStrategies()
+            if (wantRun) {
+              const row = (this.systemStrategies || []).find(s => s.id === record.id)
+              if (row && String(row.status || '').toLowerCase() !== 'running') {
+                this.$message.warning(
+                  this.$t('systemOverview.strategyStartNotPersisted')
+                    || '策略未能保持运行，请打开该策略查看运行日志'
+                )
+              }
+            }
+          } else {
+            this.$message.error((res && res.msg) || 'Operation failed')
+            await this.loadSystemStrategies()
+          }
+        } catch (e) {
+          this.$message.error('Operation failed')
+        } finally {
+          this.strategyTogglingId = null
+        }
+      }
+      if (!wantRun && record.execution_mode === 'live') {
+        this.$confirm({
+          title: this.$t('systemOverview.confirmStopLiveTitle') || 'Stop live strategy?',
+          content: this.$t('systemOverview.confirmStopLiveDesc') || 'This will stop the live executor for this user strategy.',
+          okText: this.$t('systemOverview.stopStrategy') || 'Stop',
+          cancelText: this.$t('common.cancel') || 'Cancel',
+          okType: 'danger',
+          onOk: () => runToggle()
+        })
+        return
+      }
+      runToggle()
     },
 
     getUserColor (userId) {
@@ -1975,17 +2300,25 @@ export default {
     },
 
     // ==================== User Management ====================
-    async loadUsers () {
+    async loadUsers (retryOnEmptyPage = true) {
       this.loading = true
       try {
-        const res = await getUserList({
-          page: this.pagination.current,
-          page_size: this.pagination.pageSize,
-          search: this.searchKeyword || ''
-        })
+        const res = await getUserList(this.buildUserQueryParams())
         if (res.code === 1) {
-          this.users = res.data.items || []
-          this.pagination.total = res.data.total || 0
+          const items = res.data.items || []
+          const total = res.data.total || 0
+          if (
+            retryOnEmptyPage &&
+            items.length === 0 &&
+            total > 0 &&
+            this.pagination.current > 1
+          ) {
+            this.pagination.current = 1
+            await this.loadUsers(false)
+            return
+          }
+          this.users = items
+          this.pagination.total = total
         } else {
           this.$message.error(res.msg || 'Failed to load users')
         }
@@ -1999,9 +2332,7 @@ export default {
     async handleExportUsers () {
       this.exportingUsers = true
       try {
-        const blob = await exportUsers({
-          search: this.searchKeyword || ''
-        })
+        const blob = await exportUsers(this.buildUserQueryParams())
         const file = blob instanceof Blob ? blob : new Blob([blob], { type: 'text/csv;charset=utf-8;' })
         const url = window.URL.createObjectURL(file)
         const link = document.createElement('a')
@@ -2591,6 +2922,56 @@ export default {
   .toolbar-search {
     width: 280px;
     max-width: 100%;
+  }
+
+  .toolbar-id-input {
+    width: 120px;
+    max-width: 100%;
+  }
+
+  .toolbar-filters {
+    justify-content: flex-end;
+  }
+
+  .active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: -4px 0 12px;
+    padding: 8px 12px;
+    background: rgba(24, 144, 255, 0.06);
+    border: 1px solid rgba(24, 144, 255, 0.15);
+    border-radius: 8px;
+
+    .active-filters-label {
+      font-size: 12px;
+      color: #64748b;
+      margin-right: 4px;
+    }
+  }
+
+  .id-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+
+    .mono-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .id-copy-btn {
+      padding: 0 4px;
+      height: 22px;
+    }
+  }
+
+  .link-id-btn {
+    padding: 0;
+    height: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
   }
 
   .toolbar-select {

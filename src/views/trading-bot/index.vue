@@ -928,7 +928,39 @@ export default {
     border-color: rgba(250, 173, 20, 0.2);
   }
 
+  .ant-alert-info {
+    background: rgba(24, 144, 255, 0.12);
+    border-color: rgba(24, 144, 255, 0.3);
+
+    .ant-alert-icon {
+      color: #177ddc;
+    }
+  }
+
   .ant-alert-message { color: rgba(255, 255, 255, 0.85); }
   .ant-alert-description { color: rgba(255, 255, 255, 0.65); }
+
+  .bot-create-wizard.is-modal .wizard-content,
+  .wizard-content {
+    scrollbar-color: #434343 #1f1f1f;
+    scrollbar-width: thin;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #1f1f1f;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #434343;
+      border-radius: 4px;
+
+      &:hover {
+        background: #595959;
+      }
+    }
+  }
 }
 </style>

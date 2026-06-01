@@ -1,4 +1,4 @@
-import request, { ANALYSIS_TIMEOUT } from '@/utils/request'
+import request from '@/utils/request'
 
 const marketApi = {
   // Watchlist
@@ -6,13 +6,6 @@ const marketApi = {
   AddWatchlist: '/api/market/watchlist/add',
   RemoveWatchlist: '/api/market/watchlist/remove',
   GetWatchlistPrices: '/api/market/watchlist/prices',
-  // Analysis
-  MultiAnalysis: '/api/analysis/multiAnalysis',
-  CreateAnalysisTask: '/api/analysis/createTask',
-  GetAnalysisTaskStatus: '/api/analysis/getTaskStatus',
-  GetAnalysisHistoryList: '/api/analysis/getHistoryList',
-  DeleteAnalysisTask: '/api/analysis/deleteTask',
-  ReflectAnalysis: '/api/analysis/reflect',
   // AI chat (optional)
   ChatMessage: '/api/ai/chat/message',
   GetChatHistory: '/api/ai/chat/history',
@@ -115,85 +108,6 @@ export function getChatHistory (parameter) {
 export function saveChatHistory (parameter) {
   return request({
     url: marketApi.SaveChatHistory,
-    method: 'post',
-    data: parameter
-  })
-}
-
-/**
- * 执行多维度分析
- * @param parameter { userid: number, market: string, symbol: string }
- * @returns {*}
- */
-export function multiAnalysis (parameter) {
-  return request({
-    url: marketApi.MultiAnalysis,
-    method: 'post',
-    data: parameter,
-    timeout: ANALYSIS_TIMEOUT // Extended timeout for AI analysis
-  })
-}
-
-/**
- * 创建分析任务
- * @param parameter { userid: number, market: string, symbol: string }
- * @returns {*}
- */
-export function createAnalysisTask (parameter) {
-  return request({
-    url: marketApi.CreateAnalysisTask,
-    method: 'post',
-    data: parameter
-  })
-}
-
-/**
- * 获取分析任务状态
- * @param parameter { task_id: number }
- * @returns {*}
- */
-export function getAnalysisTaskStatus (parameter) {
-  return request({
-    url: marketApi.GetAnalysisTaskStatus,
-    method: 'get',
-    params: parameter
-  })
-}
-
-/**
- * 获取历史分析列表
- * @param parameter { userid: number, page?: number, pagesize?: number }
- * @returns {*}
- */
-export function getAnalysisHistoryList (parameter) {
-  return request({
-    url: marketApi.GetAnalysisHistoryList,
-    method: 'get',
-    params: parameter
-  })
-}
-
-/**
- * Delete analysis task
- * @param parameter { task_id: number }
- * @returns {*}
- */
-export function deleteAnalysisTask (parameter) {
-  return request({
-    url: marketApi.DeleteAnalysisTask,
-    method: 'post',
-    data: parameter
-  })
-}
-
-/**
- * 反思学习
- * @param parameter { market: string, symbol: string, decision: string, returns?: number, result?: string }
- * @returns {*}
- */
-export function reflectAnalysis (parameter) {
-  return request({
-    url: marketApi.ReflectAnalysis,
     method: 'post',
     data: parameter
   })

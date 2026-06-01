@@ -1,7 +1,3 @@
-<div align="center">
-  <img src="https://camo.githubusercontent.com/0f7d83a11ee48d716ccc895fc90dd7ea9ff3f77a9ea1132d417d95bba2306573/68747470733a2f2f61692e7175616e7464696e6765722e636f6d2f696d672f6c6f676f2e65306635313061382e706e67" alt="QuantDinger" width="120" />
-</div>
-
 <h1 align="center">QuantDinger Frontend</h1>
 
 <p align="center">
@@ -26,6 +22,8 @@
 <p align="center">
   <a href="https://ai.quantdinger.com">Live Demo</a> ·
   <a href="https://github.com/brokermr810/QuantDinger">Main Repository</a> ·
+  <a href="#deployment">Deployment</a> ·
+  <a href="#development-setup">Development</a> ·
   <a href="https://t.me/worldinbroker">Telegram</a> ·
   <a href="#license">License</a>
 </p>
@@ -77,6 +75,136 @@ If you are looking for one-click deployment, Docker Compose, backend APIs, or th
 - Indicator community and marketplace-oriented interfaces
 - Responsive layout, theme switching, and multilingual support
 
+## Deployment
+
+**You do not need Node.js for production.** Every `v*` release on this repo publishes a multi-arch nginx image to GHCR. Most operators pull that image through the [QuantDinger main repository](https://github.com/brokermr810/QuantDinger) Docker Compose stack.
+
+| Image | Registry path |
+|-------|----------------|
+| Official frontend | `ghcr.io/brokermr810/quantdinger-frontend` |
+| Tags | `latest`, semver (`3.0.22`), `{major}.{minor}` (`3.0`) |
+
+See available tags on [QuantDinger Releases](https://github.com/brokermr810/QuantDinger/releases) and [QuantDinger-Vue Releases](https://github.com/brokermr810/QuantDinger-Vue/releases).
+
+### Option 1 — Full stack via main repo (recommended)
+
+Fastest path — backend + frontend + Postgres + Redis, frontend pulled from GHCR automatically:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brokermr810/QuantDinger/main/install.sh | bash
+# open http://localhost:8888  (default login: quantdinger / 123456)
+```
+
+Or clone the main repo and run `docker compose pull && docker compose up -d`. The `frontend` service uses `ghcr.io/brokermr810/quantdinger-frontend` — no Vue source tree required.
+
+Docs: [main README — Try in 2 minutes](https://github.com/brokermr810/QuantDinger#try-in-2-minutes)
+
+### Option 2 — GHCR-only Compose (two files, no git clone)
+
+From the main repo’s [`docker-compose.ghcr.yml`](https://github.com/brokermr810/QuantDinger/blob/main/docker-compose.ghcr.yml):
+
+```bash
+curl -O https://raw.githubusercontent.com/brokermr810/QuantDinger/main/docker-compose.ghcr.yml
+curl -o backend.env https://raw.githubusercontent.com/brokermr810/QuantDinger/main/backend_api_python/env.example
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+### Option 3 — Pull and run the frontend image alone
+
+Useful when the backend already runs elsewhere (Railway, bare metal, another Compose project):
+
+```bash
+docker pull ghcr.io/brokermr810/quantdinger-frontend:latest
+
+docker run -d --name quantdinger-frontend \
+  -p 8888:80 \
+  -e BACKEND_URL=http://host.docker.internal:5000 \
+  ghcr.io/brokermr810/quantdinger-frontend:latest
+```
+
+| Variable | Purpose |
+|----------|---------|
+| `BACKEND_URL` | Upstream API base for nginx `/api/` proxy. Default in Compose: `http://backend:5000`. On Docker Desktop use `http://host.docker.internal:5000` when the API runs on the host. |
+
+Pin a release instead of `latest`:
+
+```bash
+docker pull ghcr.io/brokermr810/quantdinger-frontend:3.0.22
+```
+
+### Pin and update image tags (Compose)
+
+In the **main repo project root**, create or edit `.env`:
+
+```ini
+# Lock both backend and frontend to the same release
+IMAGE_TAG=3.0.22
+
+# Or override frontend only (backend keeps IMAGE_TAG / latest)
+# FRONTEND_TAG=3.0.22
+# BACKEND_TAG=3.0.21
+```
+
+Tag resolution (highest wins): **`FRONTEND_TAG` → `IMAGE_TAG` → `latest`**.
+
+**Update to a newer frontend** (full stack):
+
+```bash
+cd QuantDinger   # main repo root
+docker compose pull
+docker compose up -d
+```
+
+**Update frontend only** (leave backend running):
+
+```bash
+docker compose pull frontend
+docker compose up -d --no-deps frontend
+```
+
+After changing `IMAGE_TAG` or `FRONTEND_TAG` in `.env`, run `pull` then `up -d` again so Compose recreates the container with the new tag.
+
+**Verify the running tag:**
+
+```bash
+docker inspect quantdinger-frontend --format '{{.Config.Image}}'
+```
+
+### Option 4 — Build from this source
+
+| Goal | Command |
+|------|---------|
+| Local nginx image | `docker build -t quantdinger-frontend:local .` then `docker run …` (see below) |
+| Static `dist/` only | `pnpm run build` → serve `dist/` or use release **`dist.tar.gz`** |
+| Dev inside main repo tree | `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build` with this repo cloned to `./QuantDinger-Vue/` |
+
+Local Docker build (same Dockerfile as CI):
+
+```bash
+docker build -t quantdinger-frontend:local .
+docker run --rm -p 8080:80 -e BACKEND_URL=http://host.docker.internal:5000 quantdinger-frontend:local
+```
+
+Sync built assets into the main repo without rebuilding the image:
+
+```bash
+pnpm run build
+rm -rf ../frontend/dist/*
+cp -r dist/* ../frontend/dist/
+docker compose up -d --no-deps frontend   # if using main repo bind-mount path
+```
+
+### Pull troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `denied` / manifest unknown | Confirm the tag exists on [Releases](https://github.com/brokermr810/QuantDinger/releases); try `latest` or a listed semver. |
+| Slow pull (China / VPN) | In main repo `.env`: `IMAGE_PREFIX=docker.m.daocloud.io/library/` for Postgres/Redis; configure **Docker Desktop → Proxies** for GHCR. |
+| Private fork image | `docker login ghcr.io` then set `FRONTEND_IMAGE=ghcr.io/<your-org>/quantdinger-frontend` in `.env`. |
+
+---
+
 ## Development Setup
 
 ### Prerequisites
@@ -102,7 +230,7 @@ pnpm install
 pnpm run serve
 ```
 
-If you work from a copy inside the main QuantDinger tree (e.g. `QuantDinger-Vue-src/`), run the same commands in that directory instead.
+If you work from a copy inside the main QuantDinger tree (e.g. `QuantDinger-Vue-src/`), run the same commands in this directory instead.
 
 ### Start the backend first
 
@@ -116,7 +244,7 @@ Before `pnpm run serve`, ensure the backend answers on port **5000**. Common opt
 | Mode | URL |
 |------|-----|
 | `pnpm run serve` (this source tree) | `http://localhost:8000` |
-| Main repo Docker stack (prebuilt `frontend/dist`) | `http://localhost:8888` |
+| Main repo Docker stack (GHCR frontend image) | `http://localhost:8888` |
 
 Default login follows backend configuration. In the default Docker experience it is commonly:
 
@@ -133,63 +261,15 @@ In local development, `/api/*` requests are proxied to the backend through `vue.
 
 If your backend runs elsewhere, update the proxy target accordingly.
 
-## Recommended Integration Modes
-
-### Option A: Use the Main Repository
-
-For most users, the recommended path is to use the main QuantDinger repository, which includes Docker Compose, backend services, Nginx delivery, and deployment documentation:
-
-- [QuantDinger main repository](https://github.com/brokermr810/QuantDinger)
-
-### Option B: Frontend Source Development
-
-Use this repository directly when you want to:
-
-- customize the web UI
-- develop new pages or components
-- adjust charting, internationalization, or admin workflows
-- build and publish your own frontend artifact against a compatible backend
-
-## Production Build
+### Production build (source)
 
 ```bash
 pnpm run build
 ```
 
-Build output is generated in `dist/`. You can serve it with Nginx or another static file server.
+Output goes to `dist/`. Release assets may also ship as **`dist.tar.gz`** on [QuantDinger-Vue Releases](https://github.com/brokermr810/QuantDinger-Vue/releases) for static hosting without Docker.
 
-### Ship into the main QuantDinger repository
-
-When developing next to the backend checkout, sync `dist/` into the main repo’s prebuilt path and restart or rebuild the frontend container:
-
-```bash
-# Bash — run from QuantDinger-Vue-src/ (or QuantDinger-Vue/)
-pnpm run build
-rm -rf ../frontend/dist/*
-cp -r dist/* ../frontend/dist/
-```
-
-```powershell
-# PowerShell
-pnpm run build
-Remove-Item ..\frontend\dist\* -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item -Path dist\* -Destination ..\frontend\dist\ -Recurse -Force
-```
-
-For a production-ready integrated deployment without manual copies, prefer the main repository’s Docker Compose stack or a published GHCR image (below).
-
-## Docker image
-
-This tree includes a multi-stage `Dockerfile` (Node builder + nginx) aligned with CI:
-
-```bash
-docker build -t quantdinger-frontend:local .
-docker run --rm -p 8080:80 -e BACKEND_URL=http://host.docker.internal:5000 quantdinger-frontend:local
-```
-
-- **`BACKEND_URL`** — upstream API base used by nginx (`/api/` proxy). Default in the image: `http://backend:5000` (Docker Compose service name).
-- Official multi-arch images: `ghcr.io/brokermr810/quantdinger-frontend:<tag>` (see [QuantDinger `docker-compose.ghcr.yml`](https://github.com/brokermr810/QuantDinger/blob/main/docker-compose.ghcr.yml)).
-- Tagged releases on [QuantDinger-Vue](https://github.com/brokermr810/QuantDinger-Vue/releases) may attach **`dist.tar.gz`** for static hosting without Docker.
+---
 
 ## Functional Areas
 

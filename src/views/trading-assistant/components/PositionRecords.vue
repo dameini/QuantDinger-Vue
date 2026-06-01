@@ -1,69 +1,137 @@
 <template>
   <div class="position-records strategy-tab-pane-inner" :class="{ 'theme-dark': isDark }">
+    <a-alert
+      v-if="showReconciliationBanner"
+      :type="reconciliationAlertType"
+      show-icon
+      class="reconciliation-alert"
+      :message="reconciliationTitle"
+    >
+      <template slot="description">
+        <div>{{ reconciliationDescription }}</div>
+        <ul v-if="reconciliationNotes.length" class="reconciliation-notes">
+          <li v-for="(note, idx) in reconciliationNotes" :key="idx">{{ formatReconciliationNote(note) }}</li>
+        </ul>
+        <div v-if="sharedCredentialHint" class="shared-credential-hint">
+          {{ $t('trading-assistant.positions.sharedCredentialHint') }}
+        </div>
+      </template>
+    </a-alert>
+
     <div class="records-toolbar">
       <a-checkbox-group v-model="sourceFilter" class="source-filter">
         <a-checkbox value="local">{{ $t('trading-assistant.records.sourceLocal') }}</a-checkbox>
         <a-checkbox value="htx">{{ $t('trading-assistant.records.sourceHtx') }}</a-checkbox>
       </a-checkbox-group>
     </div>
-    <div v-if="filteredPositions.length === 0 && !loading" class="empty-state strategy-tab-empty">
-      <a-empty :description="$t('trading-assistant.table.noPositions')" />
+
+    <div class="positions-section">
+      <div v-if="isLiveMode" class="section-head">
+        <span class="section-title">{{ $t('trading-assistant.positions.strategyLedger') }}</span>
+        <a-tag color="blue">{{ $t('trading-assistant.positions.dataSourceStrategy') }}</a-tag>
+      </div>
+
+      <div v-if="filteredPositions.length === 0 && !loading" class="empty-state strategy-tab-empty">
+        <a-empty :description="$t('trading-assistant.table.noPositions')" />
+      </div>
+      <a-table
+        v-else
+        :columns="columns"
+        :data-source="filteredPositions"
+        :loading="loading"
+        :pagination="false"
+        size="small"
+        rowKey="id"
+        :scroll="{ x: 860 }"
+      >
+        <template slot="symbol" slot-scope="text, record">
+          <strong>{{ record.symbol || text }}</strong>
+        </template>
+        <template slot="side" slot-scope="text, record">
+          <a-tag :color="(record.side || text) === 'long' ? 'green' : 'red'">
+            {{ (record.side || text) === 'long' ? $t('trading-assistant.table.long') : $t('trading-assistant.table.short') }}
+          </a-tag>
+        </template>
+        <template slot="entryPrice" slot-scope="text, record">
+          <span v-if="hasValidPrice(record.entry_price || text)">
+            ${{ parseFloat(record.entry_price || text).toFixed(4) }}
+          </span>
+          <span v-else>--</span>
+        </template>
+        <template slot="currentPrice" slot-scope="text, record">
+          ${{ parseFloat(record.current_price || text || 0).toFixed(4) }}
+        </template>
+        <template slot="size" slot-scope="text, record">
+          {{ parseFloat(record.size || text || 0).toFixed(4) }}
+        </template>
+        <template slot="notional" slot-scope="text, record">
+          <span v-if="getNotional(record) > 0">${{ getNotional(record).toFixed(2) }}</span>
+          <span v-else>--</span>
+        </template>
+        <template slot="unrealizedPnl" slot-scope="text, record">
+          <span :class="{ 'profit': parseFloat(record.unrealized_pnl || text || 0) > 0, 'loss': parseFloat(record.unrealized_pnl || text || 0) < 0 }">
+            ${{ parseFloat(record.unrealized_pnl || text || 0).toFixed(2) }}
+          </span>
+        </template>
+        <template slot="pnlPercent" slot-scope="text, record">
+          <span :class="{ 'profit': parseFloat(record.pnl_percent || text || 0) > 0, 'loss': parseFloat(record.pnl_percent || text || 0) < 0 }">
+            {{ parseFloat(record.pnl_percent || text || 0).toFixed(2) }}%
+          </span>
+        </template>
+        <template slot="source" slot-scope="text, record">
+          <a-tag :class="['source-tag', sourceClass(record)]">
+            {{ sourceText(record) }}
+          </a-tag>
+        </template>
+      </a-table>
     </div>
-    <a-table
-      v-else
-      :columns="columns"
-      :data-source="filteredPositions"
-      :loading="loading"
-      :pagination="false"
-      size="small"
-      rowKey="id"
-      :scroll="{ x: 760 }"
-    >
-      <template slot="symbol" slot-scope="text, record">
-        <strong>{{ record.symbol || text }}</strong>
-      </template>
-      <template slot="side" slot-scope="text, record">
-        <a-tag :color="(record.side || text) === 'long' ? 'green' : 'red'">
-          {{ (record.side || text) === 'long' ? $t('trading-assistant.table.long') : $t('trading-assistant.table.short') }}
-        </a-tag>
-      </template>
-      <template slot="entryPrice" slot-scope="text, record">
-        <span v-if="hasValidPrice(record.entry_price || text)">
-          ${{ parseFloat(record.entry_price || text).toFixed(4) }}
-        </span>
-        <span v-else>--</span>
-      </template>
-      <template slot="currentPrice" slot-scope="text, record">
-        ${{ parseFloat(record.current_price || text || 0).toFixed(4) }}
-      </template>
-      <template slot="size" slot-scope="text, record">
-        {{ parseFloat(record.size || text || 0).toFixed(4) }}
-      </template>
-      <template slot="notional" slot-scope="text, record">
-        <span v-if="getNotional(record) > 0">${{ getNotional(record).toFixed(2) }}</span>
-        <span v-else>--</span>
-      </template>
-      <template slot="unrealizedPnl" slot-scope="text, record">
-        <span :class="{ 'profit': parseFloat(record.unrealized_pnl || text || 0) > 0, 'loss': parseFloat(record.unrealized_pnl || text || 0) < 0 }">
-          ${{ parseFloat(record.unrealized_pnl || text || 0).toFixed(2) }}
-        </span>
-      </template>
-      <template slot="pnlPercent" slot-scope="text, record">
-        <span :class="{ 'profit': parseFloat(record.pnl_percent || text || 0) > 0, 'loss': parseFloat(record.pnl_percent || text || 0) < 0 }">
-          {{ parseFloat(record.pnl_percent || text || 0).toFixed(2) }}%
-        </span>
-      </template>
-      <template slot="source" slot-scope="text, record">
-        <a-tag :class="['source-tag', sourceClass(record)]">
-          {{ sourceText(record) }}
-        </a-tag>
-      </template>
-    </a-table>
+
+    <div v-if="isLiveMode" class="positions-section account-legs-section">
+      <div class="section-head">
+        <span class="section-title">{{ $t('trading-assistant.positions.accountMirror') }}</span>
+        <a-tag color="purple">{{ $t('trading-assistant.positions.dataSourceAccount') }}</a-tag>
+      </div>
+      <div v-if="accountLegs.length === 0 && !loading" class="empty-state strategy-tab-empty account-empty">
+        <a-empty :description="$t('trading-assistant.positions.noAccountPositions')" />
+      </div>
+      <a-table
+        v-else
+        :columns="accountColumns"
+        :data-source="accountLegs"
+        :loading="loading"
+        :pagination="false"
+        size="small"
+        :rowKey="accountRowKey"
+        :scroll="{ x: 640 }"
+      >
+        <template slot="symbol" slot-scope="text, record">
+          <strong>{{ record.symbol || text }}</strong>
+        </template>
+        <template slot="side" slot-scope="text, record">
+          <a-tag :color="(record.side || text) === 'long' ? 'green' : 'red'">
+            {{ (record.side || text) === 'long' ? $t('trading-assistant.table.long') : $t('trading-assistant.table.short') }}
+          </a-tag>
+        </template>
+        <template slot="size" slot-scope="text, record">
+          {{ parseFloat(record.size || text || 0).toFixed(4) }}
+        </template>
+        <template slot="entryPrice" slot-scope="text, record">
+          <span v-if="hasValidPrice(record.entry_price || text)">
+            ${{ parseFloat(record.entry_price || text).toFixed(4) }}
+          </span>
+          <span v-else>--</span>
+        </template>
+        <template slot="syncedAt" slot-scope="text, record">
+          {{ formatSyncedAt(record.synced_at || text) }}
+        </template>
+      </a-table>
+    </div>
   </div>
 </template>
 
 <script>
 import { getStrategyPositions } from '@/api/strategy'
+import moment from 'moment'
 
 export default {
   name: 'PositionRecords',
@@ -72,6 +140,10 @@ export default {
       type: Number,
       required: true
     },
+    executionMode: {
+      type: String,
+      default: 'signal'
+    },
     marketType: {
       type: String,
       default: 'swap'
@@ -79,6 +151,10 @@ export default {
     leverage: {
       type: [Number, String],
       default: 1
+    },
+    credentialId: {
+      type: Number,
+      default: 0
     },
     loading: {
       type: Boolean,
@@ -92,80 +168,71 @@ export default {
   data () {
     return {
       positions: [],
+      accountLegs: [],
+      reconciliationStatus: { status: 'skipped', notes: [] },
       sourceFilter: ['local', 'htx'],
-      lastExchangeSyncAt: 0
+      lastExchangeSyncAt: 0,
+      pollingTimer: null
     }
   },
   computed: {
+    isLiveMode () {
+      return String(this.executionMode || '').trim().toLowerCase() === 'live'
+    },
     filteredPositions () {
       const selected = this.sourceFilter && this.sourceFilter.length ? this.sourceFilter : ['local', 'htx']
       return this.positions.filter(item => selected.includes(this.recordSourceKey(item)))
     },
+    reconciliationNotes () {
+      const notes = this.reconciliationStatus && this.reconciliationStatus.notes
+      return Array.isArray(notes) ? notes : []
+    },
+    showReconciliationBanner () {
+      if (!this.isLiveMode) return false
+      const status = String((this.reconciliationStatus && this.reconciliationStatus.status) || 'skipped')
+      return status !== 'skipped' && status !== 'ok'
+    },
+    reconciliationAlertType () {
+      const status = String((this.reconciliationStatus && this.reconciliationStatus.status) || '')
+      if (status === 'mismatch' || status === 'strategy_only') return 'warning'
+      if (status === 'account_only') return 'info'
+      return 'success'
+    },
+    reconciliationTitle () {
+      const status = String((this.reconciliationStatus && this.reconciliationStatus.status) || 'ok')
+      const key = `trading-assistant.positions.reconciliation.${status}.title`
+      const translated = this.$t(key)
+      return translated !== key ? translated : this.$t('trading-assistant.positions.reconciliation.mismatch.title')
+    },
+    reconciliationDescription () {
+      const status = String((this.reconciliationStatus && this.reconciliationStatus.status) || 'ok')
+      const key = `trading-assistant.positions.reconciliation.${status}.desc`
+      const translated = this.$t(key)
+      return translated !== key ? translated : ''
+    },
+    sharedCredentialHint () {
+      return this.isLiveMode && Number(this.credentialId || 0) > 0
+    },
     columns () {
       return [
-        {
-          title: this.$t('trading-assistant.table.symbol'),
-          dataIndex: 'symbol',
-          key: 'symbol',
-          width: 106,
-          scopedSlots: { customRender: 'symbol' }
-        },
-        {
-          title: this.$t('trading-assistant.table.side'),
-          dataIndex: 'side',
-          key: 'side',
-          width: 72,
-          scopedSlots: { customRender: 'side' }
-        },
-        {
-          title: this.$t('trading-assistant.table.size'),
-          dataIndex: 'size',
-          key: 'size',
-          width: 96,
-          scopedSlots: { customRender: 'size' }
-        },
-        {
-          title: this.$t('trading-assistant.table.notional') || 'Value (USDT)',
-          dataIndex: 'notional',
-          key: 'notional',
-          width: 106,
-          scopedSlots: { customRender: 'notional' }
-        },
-        {
-          title: this.$t('trading-assistant.table.entryPrice'),
-          dataIndex: 'entry_price',
-          key: 'entry_price',
-          width: 96,
-          scopedSlots: { customRender: 'entryPrice' }
-        },
-        {
-          title: this.$t('trading-assistant.table.currentPrice'),
-          dataIndex: 'current_price',
-          key: 'current_price',
-          width: 96,
-          scopedSlots: { customRender: 'currentPrice' }
-        },
-        {
-          title: this.$t('trading-assistant.table.unrealizedPnl'),
-          dataIndex: 'unrealized_pnl',
-          key: 'unrealized_pnl',
-          width: 102,
-          scopedSlots: { customRender: 'unrealizedPnl' }
-        },
-        {
-          title: this.$t('trading-assistant.table.pnlPercent'),
-          dataIndex: 'pnl_percent',
-          key: 'pnl_percent',
-          width: 88,
-          scopedSlots: { customRender: 'pnlPercent' }
-        },
-        {
-          title: this.$t('trading-assistant.table.source'),
-          dataIndex: 'source',
-          key: 'source',
-          width: 94,
-          scopedSlots: { customRender: 'source' }
-        }
+        { title: this.$t('trading-assistant.table.symbol'), dataIndex: 'symbol', key: 'symbol', width: 106, scopedSlots: { customRender: 'symbol' } },
+        { title: this.$t('trading-assistant.table.side'), dataIndex: 'side', key: 'side', width: 72, scopedSlots: { customRender: 'side' } },
+        { title: this.$t('trading-assistant.table.size'), dataIndex: 'size', key: 'size', width: 96, scopedSlots: { customRender: 'size' } },
+        { title: this.$t('trading-assistant.table.notional') || 'Value (USDT)', dataIndex: 'notional', key: 'notional', width: 106, scopedSlots: { customRender: 'notional' } },
+        { title: this.$t('trading-assistant.table.entryPrice'), dataIndex: 'entry_price', key: 'entry_price', width: 96, scopedSlots: { customRender: 'entryPrice' } },
+        { title: this.$t('trading-assistant.table.currentPrice'), dataIndex: 'current_price', key: 'current_price', width: 96, scopedSlots: { customRender: 'currentPrice' } },
+        { title: this.$t('trading-assistant.table.unrealizedPnl'), dataIndex: 'unrealized_pnl', key: 'unrealized_pnl', width: 102, scopedSlots: { customRender: 'unrealizedPnl' } },
+        { title: this.$t('trading-assistant.table.pnlPercent'), dataIndex: 'pnl_percent', key: 'pnl_percent', width: 88, scopedSlots: { customRender: 'pnlPercent' } },
+        { title: this.$t('trading-assistant.table.source'), dataIndex: 'source', key: 'source', width: 94, scopedSlots: { customRender: 'source' } }
+      ]
+    },
+    accountColumns () {
+      return [
+        { title: this.$t('trading-assistant.table.symbol'), dataIndex: 'symbol', key: 'symbol', width: 120, scopedSlots: { customRender: 'symbol' } },
+        { title: this.$t('trading-assistant.table.side'), dataIndex: 'side', key: 'side', width: 80, scopedSlots: { customRender: 'side' } },
+        { title: this.$t('trading-assistant.table.size'), dataIndex: 'size', key: 'size', width: 120, scopedSlots: { customRender: 'size' } },
+        { title: this.$t('trading-assistant.table.entryPrice'), dataIndex: 'entry_price', key: 'entry_price', width: 120, scopedSlots: { customRender: 'entryPrice' } },
+        { title: this.$t('trading-assistant.positions.syncedAt'), dataIndex: 'synced_at', key: 'synced_at', width: 160, scopedSlots: { customRender: 'syncedAt' } }
       ]
     }
   },
@@ -175,7 +242,6 @@ export default {
         if (val) {
           this.lastExchangeSyncAt = 0
           this.loadPositions()
-          // 每5秒刷新一次持仓
           this.startPolling()
         } else {
           this.stopPolling()
@@ -188,6 +254,9 @@ export default {
     this.stopPolling()
   },
   methods: {
+    accountRowKey (record, index) {
+      return record.id || `${record.inst_id || record.symbol}-${record.side}-${index}`
+    },
     async loadPositions () {
       if (!this.strategyId) return
 
@@ -200,11 +269,13 @@ export default {
           sync_exchange: shouldSyncExchange ? 1 : 0
         })
         if (res.code === 1) {
-          // 确保数据格式正确，处理可能的字段名不一致
+          const data = res.data || {}
           const rawPositions = [
-            ...(res.data.positions || []),
-            ...(res.data.exchange_positions || [])
+            ...(data.positions || data.items || []),
+            ...(data.exchange_positions || [])
           ]
+          this.accountLegs = data.account_legs || []
+          this.reconciliationStatus = data.reconciliation_status || { status: 'skipped', notes: [] }
 
           this.positions = rawPositions.map((position, index) => {
             const mt = String(this.marketType || 'swap').toLowerCase()
@@ -212,22 +283,19 @@ export default {
             if (!isFinite(lev) || lev <= 0) lev = 1
             if (mt === 'spot') lev = 1
 
-            // 处理 entry_price：不要回退到 current_price，避免误导显示开仓价=现价
             const entryPrice = parseFloat(position.entry_price || position.entryPrice || 0)
             const size = parseFloat(position.size || '0') || 0
             const pnl = parseFloat(position.unrealized_pnl || position.unrealizedPnl || '0') || 0
             let pnlPercent = parseFloat(position.pnl_percent || position.pnlPercent || '0') || 0
 
-            // Prefer margin-based pnl% (pnl / (notional / leverage)).
-            // If backend already returns pnl_percent, we still recompute from pnl/entry/size to keep it consistent.
             if (entryPrice > 0 && size > 0) {
               pnlPercent = (pnl / (entryPrice * size)) * 100 * lev
             } else if (mt !== 'spot') {
               pnlPercent = pnlPercent * lev
             }
 
-            const mapped = {
-              id: position.id || index,
+            return {
+              id: position.id || `${position.source || 'local'}-${index}`,
               symbol: position.symbol || '',
               side: position.side || 'long',
               size: size > 0 ? size.toString() : '0',
@@ -239,15 +307,39 @@ export default {
               source: position.source || 'local',
               attribution_status: position.attribution_status || 'strategy'
             }
-            return mapped
           })
         } else {
-          // 不显示错误，可能策略还没有持仓
           this.positions = []
+          this.accountLegs = []
+          this.reconciliationStatus = { status: 'skipped', notes: [] }
         }
       } catch (error) {
         this.positions = []
+        this.accountLegs = []
+        this.reconciliationStatus = { status: 'skipped', notes: [] }
       }
+    },
+    formatReconciliationNote (note) {
+      const raw = String(note || '')
+      const parts = raw.split(':')
+      const kind = parts[0] || ''
+      const sym = parts[1] || ''
+      const side = parts[2] || ''
+      const sideLabel = side === 'long'
+        ? this.$t('trading-assistant.table.long')
+        : side === 'short'
+          ? this.$t('trading-assistant.table.short')
+          : side
+      const prefixKey = `trading-assistant.positions.note.${kind}`
+      const prefix = this.$t(prefixKey)
+      const prefixText = prefix !== prefixKey ? prefix : kind
+      const detail = parts.slice(3).join(':')
+      return detail ? `${prefixText} · ${sym} ${sideLabel} (${detail})` : `${prefixText} · ${sym} ${sideLabel}`
+    },
+    formatSyncedAt (raw) {
+      if (!raw) return '--'
+      const m = moment(raw)
+      return m.isValid() ? m.format('MM-DD HH:mm:ss') : String(raw)
     },
     hasValidPrice (price) {
       const value = parseFloat(price)
@@ -289,7 +381,6 @@ export default {
 </script>
 
 <style lang="less" scoped>
-// 颜色变量
 @primary-color: #1890ff;
 @success-color: #0ecb81;
 @danger-color: #f6465d;
@@ -298,6 +389,22 @@ export default {
   width: 100%;
   min-height: 300px;
   padding: 0;
+
+  .reconciliation-alert {
+    margin-bottom: 12px;
+  }
+
+  .reconciliation-notes {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+  }
+
+  .shared-credential-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.55);
+  }
 
   .records-toolbar {
     display: flex;
@@ -311,6 +418,27 @@ export default {
     align-items: center;
     gap: 4px;
     font-size: 12px;
+  }
+
+  .positions-section + .positions-section {
+    margin-top: 16px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .account-empty {
+    min-height: 120px;
   }
 
   .empty-state {
@@ -329,74 +457,23 @@ export default {
     border-color: rgba(255, 255, 255, 0.08);
   }
 
+  &.theme-dark .section-title {
+    color: #d1d4dc;
+  }
+
+  &.theme-dark .shared-credential-hint {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
   ::v-deep .ant-table {
     font-size: 13px;
     color: #333;
   }
 
-  // 自定义细滚动条
   ::v-deep .ant-table-body {
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-    &::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-      border-radius: 3px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-      &:hover {
-        background: rgba(0, 0, 0, 0.3);
-      }
-    }
-  }
-
-  // 表格容器的滚动条样式
-  ::v-deep .ant-table-container {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-    &::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-      border-radius: 3px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-      &:hover {
-        background: rgba(0, 0, 0, 0.3);
-      }
-    }
-  }
-
-  // 所有可能的表格滚动容器的滚动条样式
-  ::v-deep .ant-table-content,
-  ::v-deep .ant-table-wrapper {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-    &::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-      border-radius: 3px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-      &:hover {
-        background: rgba(0, 0, 0, 0.3);
-      }
-    }
   }
 
   ::v-deep .ant-table-thead > tr > th {
@@ -412,21 +489,8 @@ export default {
     padding: 8px 10px;
     color: #334155;
     border-bottom: 1px solid #f1f5f9;
-    transition: background 0.2s ease;
-
-    strong {
-      color: #262626;
-      font-weight: 600;
-    }
   }
 
-  ::v-deep .ant-table-tbody > tr {
-    &:hover > td {
-      background: #f0f7ff !important;
-    }
-  }
-
-  // 方向标签美化
   ::v-deep .ant-tag {
     border-radius: 6px;
     padding: 2px 10px;
@@ -460,14 +524,14 @@ export default {
     color: #ffffff !important;
     border-color: #111827 !important;
   }
+
   ::v-deep .source-htx {
     background: #0052cc !important;
     color: #ffffff !important;
     border-color: #003d99 !important;
   }
-  // 暗黑主题适配
-  &.theme-dark,
-  .theme-dark & {
+
+  &.theme-dark {
     ::v-deep .ant-table {
       background: #1c1c1c !important;
       color: #d1d4dc !important;
@@ -477,7 +541,6 @@ export default {
       background: #2a2e39 !important;
       color: #d1d4dc !important;
       border-bottom-color: #363c4e !important;
-      font-weight: 600;
     }
 
     ::v-deep .ant-table-tbody > tr > td {
@@ -485,259 +548,16 @@ export default {
       color: #d1d4dc !important;
       border-bottom-color: #363c4e !important;
     }
-
-    ::v-deep .ant-table-tbody > tr:hover > td {
-      background: #2a2e39 !important;
-    }
-
-    ::v-deep .ant-table-tbody > tr > td strong {
-      color: #d1d4dc !important;
-    }
-
-    ::v-deep .ant-tag[color="green"] {
-      background: rgba(63, 185, 80, 0.18) !important;
-      color: #3fb950 !important;
-      border: 1px solid rgba(63, 185, 80, 0.35) !important;
-    }
-
-    ::v-deep .ant-tag[color="red"] {
-      background: rgba(248, 81, 73, 0.18) !important;
-      color: #f85149 !important;
-      border: 1px solid rgba(248, 81, 73, 0.35) !important;
-    }
-  }
-
-  ::v-deep .ant-table-tbody > tr:hover > td {
-    background: #fafafa;
-  }
-
-  ::v-deep .ant-empty {
-    margin: 40px 0;
-
-    .ant-empty-description {
-      color: #8c8c8c;
-    }
-  }
-
-  &.theme-dark ::v-deep .ant-empty .ant-empty-description {
-    color: rgba(255, 255, 255, 0.35);
   }
 
   .profit {
     color: @success-color;
     font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: linear-gradient(135deg, rgba(14, 203, 129, 0.12) 0%, rgba(14, 203, 129, 0.06) 100%);
-    border-radius: 6px;
-
-    &::before {
-      content: '▲';
-      font-size: 8px;
-    }
   }
 
   .loss {
     color: @danger-color;
     font-weight: 700;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: linear-gradient(135deg, rgba(246, 70, 93, 0.12) 0%, rgba(246, 70, 93, 0.06) 100%);
-    border-radius: 6px;
-
-    &::before {
-      content: '▼';
-      font-size: 8px;
-    }
-  }
-
-  // 移动端适配
-  @media (max-width: 768px) {
-    min-height: 200px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    // 移动端也使用细滚动条
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-    &::-webkit-scrollbar {
-      height: 4px;
-      width: 4px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-      border-radius: 2px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 2px;
-      &:hover {
-        background: rgba(0, 0, 0, 0.3);
-      }
-    }
-
-    .empty-state {
-      min-height: 150px;
-      padding: 20px 0;
-    }
-
-    ::v-deep .ant-table {
-      font-size: 12px;
-      min-width: 700px; // 确保表格最小宽度，触发横向滚动
-    }
-
-    // 移动端也使用细滚动条
-    ::v-deep .ant-table-body,
-    ::v-deep .ant-table-container,
-    ::v-deep .ant-table-wrapper {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-      &::-webkit-scrollbar {
-        height: 4px;
-        width: 4px;
-      }
-      &::-webkit-scrollbar-track {
-        background: transparent;
-        border-radius: 2px;
-      }
-      &::-webkit-scrollbar-thumb {
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 2px;
-        &:hover {
-          background: rgba(0, 0, 0, 0.3);
-        }
-      }
-    }
-
-    ::v-deep .ant-table-thead > tr > th {
-      padding: 8px 10px;
-      font-size: 11px;
-      white-space: nowrap;
-    }
-
-    ::v-deep .ant-table-tbody > tr > td {
-      padding: 8px 10px;
-      font-size: 11px;
-      white-space: nowrap;
-    }
-
-    ::v-deep .ant-empty {
-      margin: 20px 0;
-    }
-  }
-
-  @media (max-width: 480px) {
-    ::v-deep .ant-table {
-      font-size: 11px;
-      min-width: 600px;
-    }
-
-    ::v-deep .ant-table-thead > tr > th {
-      padding: 6px 8px;
-      font-size: 10px;
-    }
-
-    ::v-deep .ant-table-tbody > tr > td {
-      padding: 6px 8px;
-      font-size: 10px;
-    }
-
-    .profit,
-    .loss {
-      font-size: 11px;
-    }
-  }
-}
-</style>
-
-<style lang="less">
-.theme-dark .position-records,
-body.dark .position-records,
-body.realdark .position-records {
-  .ant-table {
-    background: #1c1c1c !important;
-    color: #d1d4dc !important;
-  }
-
-  .ant-table-thead > tr > th {
-    background: #2a2e39 !important;
-    color: #d1d4dc !important;
-    border-bottom-color: #363c4e !important;
-    font-weight: 600 !important;
-
-    .ant-table-column-title {
-      color: #d1d4dc !important;
-    }
-  }
-
-  .ant-table-tbody > tr > td {
-    color: #d1d4dc !important;
-    background: #1c1c1c !important;
-    border-bottom-color: #363c4e !important;
-
-    strong {
-      color: #d1d4dc !important;
-    }
-
-    *:not(.ant-tag):not(.profit):not(.loss) {
-      color: #d1d4dc !important;
-    }
-  }
-
-  .ant-table-tbody > tr:hover > td {
-    background: #2a2e39 !important;
-  }
-
-  .ant-tag[color="green"] {
-    background: rgba(63, 185, 80, 0.18) !important;
-    color: #3fb950 !important;
-    border: 1px solid rgba(63, 185, 80, 0.35) !important;
-  }
-
-  .ant-tag[color="red"] {
-    background: rgba(248, 81, 73, 0.18) !important;
-    color: #f85149 !important;
-    border: 1px solid rgba(248, 81, 73, 0.35) !important;
-  }
-
-  .profit {
-    color: #3fb950 !important;
-    background: linear-gradient(135deg, rgba(63, 185, 80, 0.15) 0%, rgba(63, 185, 80, 0.06) 100%) !important;
-  }
-
-  .loss {
-    color: #f85149 !important;
-    background: linear-gradient(135deg, rgba(248, 81, 73, 0.15) 0%, rgba(248, 81, 73, 0.06) 100%) !important;
-  }
-
-  .ant-empty .ant-empty-description {
-    color: #868993 !important;
-  }
-
-  .ant-table-body,
-  .ant-table-container,
-  .ant-table-content,
-  .ant-table-wrapper {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(209, 212, 220, 0.3) transparent;
-    &::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-      border-radius: 3px;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: rgba(209, 212, 220, 0.3);
-      border-radius: 3px;
-      &:hover {
-        background: rgba(209, 212, 220, 0.5);
-      }
-    }
   }
 }
 </style>

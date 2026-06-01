@@ -247,7 +247,7 @@
                                 <a-icon type="edit" />
                                 {{ $t('trading-assistant.editStrategy') }}
                               </a-menu-item>
-                              <a-menu-item key="backtest">
+                              <a-menu-item v-if="showStrategyListBacktest" key="backtest">
                                 <a-icon type="experiment" />
                                 {{ $t('dashboard.indicator.action.backtest') }}
                               </a-menu-item>
@@ -340,7 +340,7 @@
                             <a-icon type="edit" />
                             {{ $t('trading-assistant.editStrategy') }}
                           </a-menu-item>
-                          <a-menu-item key="backtest">
+                          <a-menu-item v-if="showStrategyListBacktest" key="backtest">
                             <a-icon type="experiment" />
                             {{ $t('dashboard.indicator.action.backtest') }}
                           </a-menu-item>
@@ -504,8 +504,10 @@
                   <a-tab-pane key="positions" :tab="$t('trading-assistant.tabs.positions')">
                     <position-records
                       :strategy-id="selectedStrategy.id"
+                      :execution-mode="selectedStrategy.execution_mode || 'signal'"
                       :market-type="(selectedStrategy.trading_config && selectedStrategy.trading_config.market_type) || 'swap'"
                       :leverage="(selectedStrategy.trading_config && selectedStrategy.trading_config.leverage) || 1"
+                      :credential-id="strategyCredentialId"
                       :loading="loadingRecords"
                       :is-dark="isDarkTheme" />
                   </a-tab-pane>
@@ -1535,6 +1537,13 @@ export default {
       if (this.$route.meta && this.$route.meta.scriptStrategiesOnly) return false
       return !this.assistantGuideDismissed
     },
+    strategyCredentialId () {
+      const st = this.selectedStrategy
+      if (!st || !st.exchange_config || typeof st.exchange_config !== 'object') return 0
+      const raw = st.exchange_config.credential_id || st.exchange_config.credentials_id
+      const n = parseInt(raw, 10)
+      return Number.isFinite(n) && n > 0 ? n : 0
+    },
     assistantGuideStorageKey () {
       const userId = this.$store.getters.userInfo?.id || 'guest'
       return `trading-assistant-guide-dismissed:${userId}`
@@ -1803,6 +1812,10 @@ export default {
     },
     isScriptStrategiesOnlyPage () {
       return !!(this.$route.meta && this.$route.meta.scriptStrategiesOnly)
+    },
+    /** Script 策略页暂无可用回测 UI（/backtest-center 已重定向），隐藏列表回测入口 */
+    showStrategyListBacktest () {
+      return !this.isScriptStrategiesOnlyPage
     },
     isIndicatorSignalOnlyPage () {
       return !!(this.$route.meta && this.$route.meta.indicatorSignalOnly)

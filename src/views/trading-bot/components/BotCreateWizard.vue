@@ -142,7 +142,7 @@
             </div>
           </a-form-model-item>
 
-          <a-form-model-item v-if="!isGridOrMartingaleBot" :label="$t('trading-bot.wizard.timeframe')">
+          <a-form-model-item v-if="needsTimeframe" :label="$t('trading-bot.wizard.timeframe')">
             <a-select v-model="baseForm.timeframe">
               <a-select-option value="1m">1 {{ $t('trading-bot.timeframe.min') }}</a-select-option>
               <a-select-option value="5m">5 {{ $t('trading-bot.timeframe.min') }}</a-select-option>
@@ -151,12 +151,6 @@
               <a-select-option value="4h">4 {{ $t('trading-bot.timeframe.hour') }}</a-select-option>
               <a-select-option value="1d">1 {{ $t('trading-bot.timeframe.day') }}</a-select-option>
             </a-select>
-          </a-form-model-item>
-          <a-form-model-item v-else :label="$t('trading-bot.wizard.timeframe')">
-            <a-input :value="$t('trading-bot.wizard.gridTickMode')" disabled />
-            <div class="form-hint" style="margin-top: 4px; font-size: 12px; color: #8c8c8c;">
-              <a-icon type="info-circle" /> {{ $t('trading-bot.wizard.gridTickModeHint') }}
-            </div>
           </a-form-model-item>
 
           <a-form-model-item :label="$t('trading-bot.wizard.marketType')">
@@ -269,22 +263,6 @@
               />
               <div class="form-hint">{{ gridOobBufferHint }}</div>
             </a-form-model-item>
-            <a-form-model-item
-              v-if="isGridLikeBot"
-              :label="$t('trading-bot.risk.tickIntervalSec')"
-            >
-              <a-input-number
-                v-model="riskForm.tickIntervalSec"
-                :min="1"
-                :max="60"
-                :step="1"
-                :precision="0"
-                style="width: 100%"
-                :formatter="v => `${v}s`"
-                :parser="v => String(v).replace('s', '')"
-              />
-              <div class="form-hint">{{ tickIntervalHint }}</div>
-            </a-form-model-item>
             <a-form-model-item :label="$t('trading-bot.risk.maxPosition')">
               <a-input-number
                 v-model="riskForm.maxPosition"
@@ -335,8 +313,8 @@
             <a-descriptions-item :label="$t('trading-bot.wizard.symbol')">
               {{ baseForm.symbol }}
             </a-descriptions-item>
-            <a-descriptions-item :label="$t('trading-bot.wizard.timeframe')">
-              {{ isGridOrMartingaleBot ? $t('trading-bot.wizard.gridTickMode') : baseForm.timeframe }}
+            <a-descriptions-item v-if="needsTimeframe" :label="$t('trading-bot.wizard.timeframe')">
+              {{ baseForm.timeframe }}
             </a-descriptions-item>
             <a-descriptions-item :label="$t('trading-bot.wizard.marketType')">
               {{ baseForm.marketType === 'swap' ? $t('trading-bot.wizard.futures') : $t('trading-bot.wizard.spot') }}
@@ -373,9 +351,6 @@
             </a-descriptions-item>
             <a-descriptions-item v-if="isGridLikeBot" :label="$t('trading-bot.risk.gridOobBufferPct')">
               {{ riskForm.gridOobBufferPct }}%
-            </a-descriptions-item>
-            <a-descriptions-item v-if="isGridLikeBot" :label="$t('trading-bot.risk.tickIntervalSec')">
-              {{ riskForm.tickIntervalSec }}s
             </a-descriptions-item>
             <a-descriptions-item v-if="botType !== 'martingale'" :label="$t('trading-bot.risk.maxPosition')">
               ${{ riskForm.maxPosition }}
@@ -565,8 +540,7 @@ export default {
         maxPosition: 5000,
         maxDailyLoss: 500,
         // grid-bot-only (P0-2 / P1-2):
-        gridOobBufferPct: 5,
-        tickIntervalSec: 1
+        gridOobBufferPct: 5
       },
       // 自选标的列表（从 qd_watchlist 拉取，按 market 过滤后只展示 Crypto）
       watchlist: [],
@@ -755,8 +729,8 @@ export default {
       const meta = BOT_TYPE_MAP[this.botType]
       return meta ? meta.component : 'GridConfig'
     },
-    isGridOrMartingaleBot () {
-      return this.botType === 'grid' || this.botType === 'martingale'
+    needsTimeframe () {
+      return this.botType === 'trend'
     },
     // grid + dca share the equity-drawdown SL/TP semantics (P0-2), so the
     // risk form uses the same hints / extra fields for both.
@@ -831,11 +805,6 @@ export default {
       return this.isZhLocale
         ? '价格突破 upperPrice × (1 + 缓冲)  或跌破 lowerPrice × (1 - 缓冲) 时，服务端平掉所有腿。默认 5%。设 0 关闭。'
         : 'When price exceeds upperPrice × (1 + buffer) or falls below lowerPrice × (1 - buffer), the server closes both legs. Defaults to 5%. Set 0 to disable.'
-    },
-    tickIntervalHint () {
-      return this.isZhLocale
-        ? '策略主循环轮询间隔。网格机器人默认 1 秒（价格驱动），趋势 / 普通策略默认 10 秒。越小越快但越耗算力。'
-        : 'Strategy loop polling interval. Grid bots default to 1s (price-driven); trend / generic strategies default to 10s. Smaller = faster reaction but more CPU.'
     },
     martingaleRiskTitle () {
       return this.isZhLocale ? '高级风控' : 'Advanced Risk Control'
@@ -941,7 +910,14 @@ export default {
       })
     },
     shouldShowStrategyParam (key) {
-      if (key === 'referencePrice') return this.botType === 'grid'
+      if (key === 'gridExecutionMode' || key === 'grid_execution_mode' || key === 'referencePrice') {
+        return false
+      }
+      if (key === 'initialPositionPct') {
+        const dir = this.strategyParams && this.strategyParams.gridDirection
+        const pct = Number(this.strategyParams && this.strategyParams.initialPositionPct)
+        return (dir === 'long' || dir === 'short') && Number.isFinite(pct) && pct > 0
+      }
       // Hide the trailing TP activation / callback details on the confirm
       // screen when trailing TP is OFF — otherwise users would see stray
       // "0.8%" rows for a feature they didn't enable, which is confusing.
@@ -961,6 +937,12 @@ export default {
         amountPerGrid: this.$t('trading-bot.grid.amountPerGrid'),
         gridMode: this.$t('trading-bot.grid.mode'),
         gridDirection: this.$t('trading-bot.grid.direction'),
+        initialPositionPct: this.$t('trading-bot.grid.initialPositionPct'),
+        boundaryAction: this.$t('trading-bot.grid.boundaryAction'),
+        adaptiveBounds: this.$t('trading-bot.grid.adaptiveBounds'),
+        adaptiveAtrMult: this.$t('trading-bot.grid.adaptiveAtrMult'),
+        waterfallProtection: this.$t('trading-bot.grid.waterfallProtection'),
+        waterfallDropPct: this.$t('trading-bot.grid.waterfallDropPct'),
         orderMode: this.$t('trading-bot.grid.orderType'),
         referencePrice: this.fallbackLabel('锚定参考价', 'Anchor Reference Price'),
         initialAmount: this.fallbackLabel('首单金额（自动计算）', 'First Order Amount (Auto)'),
@@ -1024,6 +1006,14 @@ export default {
         }
         return map[value] || value
       }
+      if (key === 'boundaryAction') {
+        const map = {
+          pause: this.$t('trading-bot.grid.boundaryPause'),
+          stop_loss: this.$t('trading-bot.grid.boundaryStopLoss'),
+          hold: this.$t('trading-bot.grid.boundaryHold')
+        }
+        return map[value] || value
+      }
       if (key === 'frequency') {
         const map = {
           every_bar: this.fallbackLabel('每根K线', 'Every Bar'),
@@ -1046,7 +1036,7 @@ export default {
         return `${display}%`
       }
       if (['priceDropPct', 'takeProfitPct', 'stopLossPct', 'dipThreshold', 'positionPct',
-           'trailingTpActivationPct', 'trailingTpCallbackPct'].includes(key)) {
+           'trailingTpActivationPct', 'trailingTpCallbackPct', 'initialPositionPct'].includes(key)) {
         return `${value}%`
       }
       if ([
@@ -1071,6 +1061,11 @@ export default {
       const next = { ...(params || {}) }
       if (this.botType === 'trend') {
         delete next.timeframe
+      }
+      if (this.botType === 'grid') {
+        delete next.gridExecutionMode
+        delete next.grid_execution_mode
+        delete next.referencePrice
       }
       // Spot markets cannot short, and long-only brokers also can't short
       // even on swap. Coerce direction params accordingly so the script
@@ -1121,9 +1116,6 @@ export default {
       // P0-2 / P1-2 grid-only fields
       if (tc.grid_oob_buffer_pct != null) {
         this.riskForm.gridOobBufferPct = tc.grid_oob_buffer_pct
-      }
-      if (tc.tick_interval_sec != null) {
-        this.riskForm.tickIntervalSec = tc.tick_interval_sec
       }
     },
     applyAiPreset () {
@@ -1395,19 +1387,12 @@ export default {
     async buildPayload () {
       const strategyParams = this.normalizeStrategyParams(this.strategyParams)
       const scriptParams = { ...strategyParams }
-      if (this.botType === 'grid') {
-        const existingRef = parseFloat(strategyParams.referencePrice)
-        const fetchedRef = this.isEditMode ? null : await this.fetchGridReferencePrice()
-        const refPrice = fetchedRef || (existingRef > 0 ? existingRef : null)
-        if (refPrice > 0) {
-          strategyParams.referencePrice = refPrice
-          scriptParams.referencePrice = refPrice
-        }
-      }
       if (this.baseForm.initialCapital > 0) {
         scriptParams._initialCapital = this.baseForm.initialCapital
       }
-      const effectiveTimeframe = this.isGridOrMartingaleBot ? '1m' : this.baseForm.timeframe
+      const effectiveTimeframe = this.needsTimeframe
+        ? this.baseForm.timeframe
+        : (this.botType === 'dca' ? '1h' : '1m')
       const strategyCode = generateBotScript(this.botType, scriptParams, {
         timeframe: effectiveTimeframe
       })
@@ -1460,8 +1445,7 @@ export default {
           // of 1s for grid bots, so only attach them on grid/dca.
           ...((this.botType === 'grid' || this.botType === 'dca')
             ? {
-                grid_oob_buffer_pct: this.riskForm.gridOobBufferPct,
-                tick_interval_sec: this.riskForm.tickIntervalSec
+                grid_oob_buffer_pct: this.riskForm.gridOobBufferPct
               }
             : {}),
           // 马丁/趋势机器人依赖即时成交触发加仓/平仓,强制市价;

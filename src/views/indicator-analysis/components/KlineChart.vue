@@ -170,7 +170,6 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch, shallowRef, getCurrentInstance } from 'vue'
 import { init, registerIndicator, registerOverlay } from 'klinecharts'
 import request from '@/utils/request'
-import { decryptCodeAuto, needsDecrypt } from '@/utils/codeDecrypt'
 import ExchangeKlineWs from '@/utils/exchangeWs'
 import { usePyodide } from '@/services/pyodide/usePyodide'
 import {
@@ -983,25 +982,7 @@ export default {
       }
 
       try {
-        // 检查代码是否需要解密（购买的指标）
-        let finalCode = userCode
-        const isEncrypted = indicatorInfo.is_encrypted || indicatorInfo.isEncrypted || 0
-        if (isEncrypted || needsDecrypt(userCode, isEncrypted)) {
-          // 获取用户ID（优先级：indicatorInfo > props > params）
-          const userId = indicatorInfo.user_id || indicatorInfo.userId || props.userId || params.userId
-          // 使用原始数据库ID（originalId），如果没有则使用id
-          const indicatorId = indicatorInfo.originalId || indicatorInfo.id || params.indicatorId
-
-          if (userId && indicatorId) {
-            try {
-              finalCode = await decryptCodeAuto(finalCode, userId, indicatorId)
-            } catch (decryptError) {
-              throw new Error('代码解密失败，无法执行指标: ' + (decryptError.message || '未知错误'))
-            }
-          } else {
-            throw new Error('缺少必要的解密参数（用户ID或指标ID），无法执行加密指标')
-          }
-        }
+        const finalCode = userCode
 
         // 数据归一化：兼容 internal(time) / KLineChart(timestamp) 两种字段名，统一为秒级 time。
         const rawData = klineData.map(item => {

@@ -10,7 +10,7 @@
     class="indicator-detail-modal"
   >
     <a-spin :spinning="loading">
-      <div v-if="detail" class="detail-container">
+      <div v-if="detail" class="detail-container indicator-detail-modal" :class="{ 'is-dark': isDarkTheme }">
         <!-- 头部区域 -->
         <div class="detail-header" :style="headerStyle">
           <div class="header-cover" v-if="detail.preview_image">
@@ -426,6 +426,11 @@ export default {
       } else {
         this.resetData()
       }
+    },
+    isDarkTheme () {
+      if (this.hasEquityCurve && this.equityChartInst) {
+        this.$nextTick(() => this.renderEquityChart())
+      }
     }
   },
   beforeDestroy () {
@@ -508,23 +513,35 @@ export default {
         // normalized equity, or initial capital) so a flat-line series
         // doesn't look like it shot to infinity.
         const baseline = ys.length ? ys[0] : 0
+        const dark = this.isDarkTheme
+        const axisLabelColor = dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'
+        const splitLineColor = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'
+        const axisLineColor = dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'
         inst.setOption({
+          backgroundColor: 'transparent',
           grid: { left: 50, right: 16, top: 16, bottom: 32 },
           tooltip: {
             trigger: 'axis',
             confine: true,
+            backgroundColor: dark ? 'rgba(38,38,38,0.96)' : undefined,
+            borderColor: dark ? '#434343' : undefined,
+            textStyle: dark ? { color: 'rgba(255,255,255,0.85)' } : undefined,
             axisPointer: { type: 'cross' }
           },
           xAxis: {
             type: 'category',
             data: xs,
             boundaryGap: false,
-            axisLabel: { fontSize: 11 }
+            axisLabel: { fontSize: 11, color: axisLabelColor },
+            axisLine: { lineStyle: { color: axisLineColor } },
+            splitLine: { show: false }
           },
           yAxis: {
             type: 'value',
             scale: true,
-            axisLabel: { fontSize: 11 }
+            axisLabel: { fontSize: 11, color: axisLabelColor },
+            axisLine: { lineStyle: { color: axisLineColor } },
+            splitLine: { lineStyle: { color: splitLineColor } }
           },
           series: [{
             name: this.$t('community.equityCurveTitle'),
@@ -1120,6 +1137,137 @@ export default {
   }
 }
 
+// Dark theme — scoped overrides beat the light-theme rules above because
+// `.is-dark` adds an extra class on the same [data-v] subtree.
+.detail-container.is-dark {
+  .detail-body {
+    background: #1a1a1a;
+
+    .section h3 {
+      color: rgba(255, 255, 255, 0.88);
+      border-color: #303030;
+    }
+
+    .description {
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .performance-grid .perf-item {
+      background: #262626;
+
+      .perf-label {
+        color: rgba(255, 255, 255, 0.55);
+
+        .anticon {
+          color: rgba(255, 255, 255, 0.35);
+        }
+
+        .src-tag {
+          &--bt {
+            background: rgba(24, 144, 255, 0.16);
+            color: #69c0ff;
+          }
+
+          &--live {
+            background: rgba(82, 196, 26, 0.16);
+            color: #95de64;
+          }
+        }
+      }
+
+      .perf-value {
+        color: rgba(255, 255, 255, 0.88);
+
+        .perf-unit {
+          color: rgba(255, 255, 255, 0.45);
+        }
+      }
+
+      &--score {
+        background: linear-gradient(135deg, rgba(245, 175, 25, 0.18) 0%, rgba(241, 39, 17, 0.12) 100%);
+
+        .perf-value {
+          color: #ffa940;
+        }
+      }
+    }
+
+    .applicable-row {
+      &__label {
+        color: rgba(255, 255, 255, 0.65);
+      }
+
+      &__empty {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      &__tags {
+        .tag-symbol {
+          background: rgba(24, 144, 255, 0.16);
+          color: #69c0ff;
+        }
+
+        .tag-tf {
+          background: rgba(82, 196, 26, 0.16);
+          color: #95de64;
+        }
+      }
+    }
+
+    .equity-card {
+      background: #262626;
+      border-color: #303030;
+
+      &__title {
+        color: rgba(255, 255, 255, 0.88);
+      }
+
+      &__meta {
+        .tag-symbol {
+          background: rgba(24, 144, 255, 0.16);
+          color: #69c0ff;
+        }
+
+        .tag-tf {
+          background: rgba(82, 196, 26, 0.16);
+          color: #95de64;
+        }
+
+        .positive {
+          color: #95de64;
+        }
+
+        .negative {
+          color: #ff7875;
+        }
+      }
+
+      &__meta-sep {
+        color: rgba(255, 255, 255, 0.25);
+      }
+
+      &__hint {
+        color: rgba(255, 255, 255, 0.45);
+      }
+    }
+  }
+
+  .detail-footer {
+    background: #1f1f1f;
+    border-color: #303030;
+
+    .price-info {
+      .price-line__label {
+        color: rgba(255, 255, 255, 0.45);
+      }
+
+      .price-line--secondary .price-current-aside {
+        color: rgba(255, 255, 255, 0.35);
+      }
+    }
+  }
+}
+
 </style>
 
 <!--
@@ -1150,8 +1298,27 @@ export default {
     }
   }
 
-  .indicator-detail-modal .detail-body {
+  .detail-body {
     background: #1a1a1a;
+    scrollbar-color: #434343 #1a1a1a;
+    scrollbar-width: thin;
+
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #1a1a1a;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #434343;
+      border-radius: 4px;
+
+      &:hover {
+        background: #595959;
+      }
+    }
 
     .section h3 {
       color: rgba(255, 255, 255, 0.88);
@@ -1163,7 +1330,7 @@ export default {
     }
 
     .performance-grid .perf-item {
-      background: #262626;
+      background: #262626 !important;
 
       .perf-label {
         color: rgba(255, 255, 255, 0.55);
@@ -1180,7 +1347,7 @@ export default {
       }
 
       &--score {
-        background: linear-gradient(135deg, rgba(245, 175, 25, 0.18) 0%, rgba(241, 39, 17, 0.12) 100%);
+        background: linear-gradient(135deg, rgba(245, 175, 25, 0.18) 0%, rgba(241, 39, 17, 0.12) 100%) !important;
         .perf-value { color: #ffa940; }
       }
     }
@@ -1195,7 +1362,7 @@ export default {
     }
 
     .equity-card {
-      background: #262626;
+      background: #262626 !important;
       border-color: #303030;
 
       &__title { color: rgba(255, 255, 255, 0.88); }
@@ -1208,10 +1375,27 @@ export default {
       &__meta-sep { color: rgba(255, 255, 255, 0.25); }
       &__hint { color: rgba(255, 255, 255, 0.4); }
     }
+
+    .ant-alert-info {
+      background: rgba(24, 144, 255, 0.12);
+      border-color: rgba(24, 144, 255, 0.3);
+
+      .ant-alert-icon {
+        color: #177ddc;
+      }
+
+      .ant-alert-message {
+        color: rgba(255, 255, 255, 0.88);
+      }
+
+      .ant-alert-description {
+        color: rgba(255, 255, 255, 0.65);
+      }
+    }
   }
 
-  .indicator-detail-modal .detail-footer {
-    background: #1f1f1f;
+  .detail-footer {
+    background: #1f1f1f !important;
     border-color: #303030;
 
     .price-info {
@@ -1227,7 +1411,7 @@ export default {
     }
   }
 
-  .indicator-detail-modal .action-buttons {
+  .action-buttons {
     .ant-btn:not(.ant-btn-primary) {
       background: #262626;
       border-color: #434343;
@@ -1248,7 +1432,7 @@ export default {
     }
   }
 
-  .indicator-detail-modal {
+  .detail-header {
     .ant-statistic {
       .ant-statistic-content {
         color: rgba(255, 255, 255, 0.88);
