@@ -1,6 +1,6 @@
 
 <template>
-  <div class="dashboard-pro" :class="{ 'theme-dark': isDarkTheme }">
+  <div class="dashboard-pro" :class="{ 'theme-dark': isDarkTheme, 'dashboard-pro--embedded': embedded }">
     <!-- 主要KPI指标卡片 -->
     <div class="kpi-grid">
       <!-- 总权益 -->
@@ -132,12 +132,22 @@
             <span class="kpi-label">{{ $t('dashboard.runningStrategies') || '运行中策略' }}</span>
           </div>
           <div class="kpi-value">
-            <span class="amount">{{ summary.indicator_strategy_count }}</span>
+            <span class="amount">{{ summary.running_strategy_count != null ? summary.running_strategy_count : summary.indicator_strategy_count }}</span>
             <span class="unit">{{ $t('dashboard.unit.strategies') }}</span>
           </div>
-          <div class="kpi-sub">
-            <span class="highlight">{{ summary.indicator_strategy_count }}</span>
-            <span class="label"> {{ $t('dashboard.label.indicator') }}</span>
+          <div class="kpi-sub kpi-sub--types">
+            <span class="type-pill type-pill--signal">
+              <em>{{ summary.running_indicator_count != null ? summary.running_indicator_count : 0 }}</em>
+              {{ $t('dashboard.label.indicator') }}
+            </span>
+            <span class="type-pill type-pill--script">
+              <em>{{ summary.running_script_count || 0 }}</em>
+              {{ $t('dashboard.label.script') }}
+            </span>
+            <span class="type-pill type-pill--bot">
+              <em>{{ summary.running_bot_count || 0 }}</em>
+              {{ $t('dashboard.label.bot') }}
+            </span>
           </div>
         </div>
         <div class="card-arrow">
@@ -294,7 +304,12 @@
           >
             <div class="rank-badge" :class="`rank-${idx + 1}`">{{ idx + 1 }}</div>
             <div class="rank-info">
-              <div class="rank-name">{{ s.strategy_name }}</div>
+              <div class="rank-name">
+                <span class="rank-type-tag" :class="`rank-type-tag--${s.strategy_bucket || 'signal'}`">
+                  {{ strategyBucketLabel(s.strategy_bucket) }}
+                </span>
+                {{ s.strategy_name }}
+              </div>
               <div class="rank-stats">
                 <span class="stat">
                   <label>{{ $t('dashboard.ranking.totalProfit') }}</label>
@@ -524,6 +539,10 @@ export default {
     hideSetupGuide: {
       type: Boolean,
       default: false
+    },
+    embedded: {
+      type: Boolean,
+      default: false
     }
   },
   data () {
@@ -578,7 +597,11 @@ export default {
       return this.summary.strategy_stats || []
     },
     showSetupGuide () {
-      const runningStrategies = Number(this.summary.indicator_strategy_count || 0)
+      const runningStrategies = Number(
+        this.summary.running_strategy_count != null
+          ? this.summary.running_strategy_count
+          : this.summary.indicator_strategy_count || 0
+      )
       const hasPositions = Array.isArray(this.summary.current_positions) && this.summary.current_positions.length > 0
       const hasTrades = Array.isArray(this.summary.recent_trades) && this.summary.recent_trades.length > 0
       return runningStrategies === 0 || (!hasPositions && !hasTrades)
@@ -770,7 +793,15 @@ export default {
   },
   methods: {
     goToStrategyManagement () {
-      this.$router.push({ path: '/strategy-live', query: { tab: 'strategy' } }).catch(() => {})
+      this.$router.push({ path: '/strategy-center', query: { tab: 'overview' } }).catch(() => {})
+    },
+    strategyBucketLabel (bucket) {
+      const map = {
+        signal: this.$t('dashboard.label.indicator'),
+        script: this.$t('dashboard.label.script'),
+        bot: this.$t('dashboard.label.bot')
+      }
+      return map[String(bucket || 'signal')] || map.signal
     },
     goToStrategyCreate () {
       this.$router.push({ path: '/strategy-live', query: { tab: 'strategy', mode: 'create' } }).catch(() => {})
@@ -1468,6 +1499,12 @@ export default {
   background: @bg-light;
   transition: background 0.3s;
 
+  &.dashboard-pro--embedded {
+    min-height: auto;
+    padding: 0;
+    background: transparent;
+  }
+
   &.theme-dark {
     background: @bg-dark;
 
@@ -1842,6 +1879,46 @@ export default {
       .label { margin: 0 2px; }
       .divider { margin: 0 6px; opacity: 0.5; }
       .highlight { font-weight: 600; color: @blue; }
+
+      &--types {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+    }
+
+    .type-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1.4;
+      background: rgba(59, 130, 246, 0.08);
+      color: @text-secondary-light;
+
+      em {
+        font-style: normal;
+        font-weight: 700;
+        color: @text-primary-light;
+      }
+
+      &--signal {
+        background: rgba(59, 130, 246, 0.1);
+        em { color: @blue; }
+      }
+
+      &--script {
+        background: rgba(139, 92, 246, 0.1);
+        em { color: @purple; }
+      }
+
+      &--bot {
+        background: rgba(6, 182, 212, 0.12);
+        em { color: @cyan; }
+      }
     }
 
     // Primary card with gradient
@@ -2239,6 +2316,33 @@ export default {
           overflow: hidden;
           text-overflow: ellipsis;
           margin-bottom: 4px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .rank-type-tag {
+          flex-shrink: 0;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-size: 10px;
+          font-weight: 600;
+          line-height: 1.5;
+
+          &--signal {
+            background: rgba(59, 130, 246, 0.12);
+            color: @blue;
+          }
+
+          &--script {
+            background: rgba(139, 92, 246, 0.12);
+            color: @purple;
+          }
+
+          &--bot {
+            background: rgba(6, 182, 212, 0.14);
+            color: @cyan;
+          }
         }
 
         .rank-stats {

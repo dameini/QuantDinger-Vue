@@ -465,6 +465,7 @@ import GridConfig from './configs/GridConfig.vue'
 import MartingaleConfig from './configs/MartingaleConfig.vue'
 import TrendConfig from './configs/TrendConfig.vue'
 import DCAConfig from './configs/DCAConfig.vue'
+import { formatPercentDisplay, ratioOrPercentToUiPercent } from '@/utils/numberFormat'
 
 const BOT_TYPE_MAP = {
   grid: {
@@ -1030,10 +1031,8 @@ export default {
         return value ? this.fallbackLabel('开启', 'Enabled') : this.fallbackLabel('关闭', 'Disabled')
       }
       if (key === 'waterfallDropPct') {
-        const pct = Number(value)
-        if (!Number.isFinite(pct)) return value
-        const display = pct <= 1 ? pct * 100 : pct
-        return `${display}%`
+        const display = ratioOrPercentToUiPercent(value, 3)
+        return `${formatPercentDisplay(display, 2)}%`
       }
       if (['priceDropPct', 'takeProfitPct', 'stopLossPct', 'dipThreshold', 'positionPct',
            'trailingTpActivationPct', 'trailingTpCallbackPct', 'initialPositionPct'].includes(key)) {
@@ -1074,6 +1073,9 @@ export default {
       if (forceLong) {
         if (this.botType === 'grid') next.gridDirection = 'long'
         if (this.botType === 'martingale' || this.botType === 'trend') next.direction = 'long'
+      }
+      if (next.waterfallDropPct != null && next.waterfallDropPct !== '') {
+        next.waterfallDropPct = ratioOrPercentToUiPercent(next.waterfallDropPct, 4)
       }
       return next
     },
@@ -1142,7 +1144,7 @@ export default {
             params.stopLossPct = (p.riskConfig || {}).stopLossPct
           }
         }
-        this.strategyParams = params
+        this.strategyParams = this.normalizeStrategyParams(params)
       }
       this.riskForm.stopLossPct = this.botType === 'martingale' ? 0 : ((p.riskConfig || {}).stopLossPct ?? 10)
       this.riskForm.takeProfitPct = this.botType === 'martingale' ? 0 : ((p.riskConfig || {}).takeProfitPct ?? 20)

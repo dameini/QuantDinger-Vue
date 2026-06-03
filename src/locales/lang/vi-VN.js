@@ -25,7 +25,7 @@ const locale = {
 
   'menu.dashboard.indicator': 'Biểu đồ & chỉ báo',
 
-  'menu.dashboard.community': 'Cộng đồng chỉ báo',
+  'menu.dashboard.community': 'Chợ chiến lược',
 
   'menu.dashboard.analysis': 'Phân tích AI',
 
@@ -3288,7 +3288,7 @@ const locale = {
   'common.noData': 'Chưa có dữ liệu',
   'common.yes': 'Có',
   'common.no': 'Không',
-  'menu.dashboard.aiAssetAnalysis': 'Phân tích tài sản AI',
+  'menu.dashboard.aiAssetAnalysis': 'Phân tích AI thông minh',
   'menu.dashboard.aiQuant': 'Định lượng AI',
   'trading-bot.type.custom': 'Tập lệnh tùy chỉnh',
   'trading-bot.type.customDesc': 'Viết logic chiến lược của riêng bạn bằng Python',
@@ -3393,7 +3393,7 @@ const locale = {
   'menu.dashboard.portfolio': 'Giám sát tài sản',
   'menu.dashboard.globalMarket': 'Thị trường toàn cầu',
   'menu.settings': 'Cài đặt hệ thống',
-  'aiAssetAnalysis.title': 'Phân tích tài sản AI',
+  'aiAssetAnalysis.title': 'Phân tích AI thông minh',
   'aiAssetAnalysis.subtitle': 'Tích hợp giám sát tài sản, phân tích tức thời, tác vụ định kỳ vào một quy trình làm việc mượt mà.',
   'aiAssetAnalysis.actions.quickAnalysis': 'Bắt đầu phân tích ngay',
   'aiAssetAnalysis.actions.monitorTasks': 'Quản lý tác vụ giám sát',

@@ -231,12 +231,21 @@ export default {
       const routes = this.mainMenu.find(item => item.path === '/')
       return (routes && routes.children) || []
     },
+    showAdminMenuDivider () {
+      const routes = this.mainMenu.find(item => item.path === '/')
+      const children = (routes && routes.children) || []
+      return children.some(route => {
+        if (route.hidden) return false
+        const perms = (route.meta && route.meta.permission) || []
+        return perms.includes('admin')
+      })
+    },
     // 给模板复用：所有 footer/legal 项都从 brand store 读，留空时回退到默认
     menuFooterConfig () {
       return this.brandConfig
     },
     appVersion () {
-      return (this.brandConfig && this.brandConfig.app_version) || defaultSettings.appVersion || '3.0.22'
+      return (this.brandConfig && this.brandConfig.app_version) || defaultSettings.appVersion || '3.0.28'
     },
     // Logo 优先用后端 BRAND_LOGO_*_URL；为空时回退到打包好的 assets/logo.png
     currentLogo () {
@@ -300,6 +309,20 @@ export default {
       }
     }, { immediate: true })
   },
+  watch: {
+    mainMenu: {
+      handler () {
+        this.scheduleAdminMenuDivider()
+      },
+      deep: true
+    },
+    collapsed () {
+      this.scheduleAdminMenuDivider()
+    },
+    showAdminMenuDivider () {
+      this.scheduleAdminMenuDivider()
+    }
+  },
   mounted () {
     const userAgent = navigator.userAgent
     if (userAgent.indexOf('Edge') > -1) {
@@ -329,6 +352,8 @@ export default {
     this.$nextTick(() => {
       setTimeout(() => {
         this.updateMenuFooterPosition()
+        this.updateAdminMenuDivider()
+        this.setupAdminMenuDividerObserver()
       }, 200)
     })
 
@@ -339,6 +364,7 @@ export default {
     if (!this.isMobile) {
       this._desktopFooterInterval = setInterval(() => {
         this.updateMenuFooterPosition()
+        this.updateAdminMenuDivider()
       }, 1000)
     }
 
@@ -362,6 +388,7 @@ export default {
             setTimeout(() => {
               this.isDrawerAnimating = false
               this.updateMenuFooterPosition()
+              this.scheduleAdminMenuDivider()
             }, 300)
           } else {
             // drawer 关闭，立即隐藏 footer
@@ -423,6 +450,16 @@ export default {
       clearInterval(this._menuFooterInterval)
     }
 
+    if (this._adminDividerObserver) {
+      this._adminDividerObserver.disconnect()
+      this._adminDividerObserver = null
+    }
+
+    if (this._adminDividerTimer) {
+      clearTimeout(this._adminDividerTimer)
+      this._adminDividerTimer = null
+    }
+
     // 清理桌面端定时器
     if (this._desktopFooterInterval) {
       clearInterval(this._desktopFooterInterval)
@@ -430,6 +467,71 @@ export default {
   },
   methods: {
     i18nRender,
+    updateAdminMenuDivider () {
+      this.$nextTick(() => {
+        requestAnimationFrame(() => {
+          const menuRoots = Array.from(
+            document.querySelectorAll('.ant-pro-sider .ant-menu, .ant-drawer .ant-menu')
+          )
+          menuRoots.forEach(root => {
+            root.querySelectorAll('.sidebar-admin-divider').forEach(el => el.remove())
+            if (!this.showAdminMenuDivider) return
+
+            const profileItem = this.findProfileMenuItem(root)
+            if (!profileItem) return
+            if (profileItem.nextElementSibling && profileItem.nextElementSibling.classList.contains('sidebar-admin-divider')) {
+              return
+            }
+
+            const divider = document.createElement('li')
+            divider.className = 'ant-menu-item sidebar-admin-divider'
+            divider.setAttribute('role', 'separator')
+            divider.innerHTML = '<span class="sidebar-admin-divider-line" aria-hidden="true"></span>'
+            profileItem.insertAdjacentElement('afterend', divider)
+          })
+        })
+      })
+    },
+    findProfileMenuItem (root) {
+      const routes = this.mainMenu.find(item => item.path === '/')
+      const children = (routes && routes.children) || []
+      const visibleRoutes = children.filter(route => !route.hidden)
+      const profileIndex = visibleRoutes.findIndex(route => route.path === '/profile')
+      const items = root.querySelectorAll('li.ant-menu-item:not(.sidebar-admin-divider)')
+      if (profileIndex >= 0 && items[profileIndex]) {
+        return items[profileIndex]
+      }
+      for (const li of items) {
+        const link = li.querySelector('a')
+        if (!link) continue
+        const href = String(link.getAttribute('href') || '').toLowerCase()
+        if (href.includes('/profile') || href.endsWith('profile')) {
+          return li
+        }
+      }
+      return null
+    },
+    scheduleAdminMenuDivider () {
+      if (this._adminDividerTimer) {
+        clearTimeout(this._adminDividerTimer)
+      }
+      this._adminDividerTimer = setTimeout(() => {
+        this._adminDividerTimer = null
+        this.updateAdminMenuDivider()
+      }, 60)
+    },
+    setupAdminMenuDividerObserver () {
+      if (this._adminDividerObserver) {
+        this._adminDividerObserver.disconnect()
+        this._adminDividerObserver = null
+      }
+      const menuEl = document.querySelector('.ant-pro-sider .ant-menu')
+      if (!menuEl) return
+      this._adminDividerObserver = new MutationObserver(() => {
+        this.scheduleAdminMenuDivider()
+      })
+      this._adminDividerObserver.observe(menuEl, { childList: true })
+    },
     updateMenuFooterPosition () {
       this.$nextTick(() => {
         // 使用 requestAnimationFrame 确保在浏览器下一次重绘前更新，避免打断 CSS 过渡
@@ -918,6 +1020,41 @@ export default {
 
 /* 侧栏菜单滚动 & 为自定义 footer 预留空间 */
 .basic-layout-wrapper {
+  /* 个人中心下方的管理员区分隔线（DOM 注入，非菜单路由项） */
+  ::v-deep li.ant-menu-item.sidebar-admin-divider {
+    height: auto !important;
+    line-height: 1 !important;
+    margin: 10px 16px 12px !important;
+    padding: 0 !important;
+    pointer-events: none;
+    cursor: default;
+    list-style: none;
+    overflow: hidden;
+
+    &::after {
+      display: none;
+    }
+
+    .anticon,
+    .ant-menu-item-icon {
+      display: none !important;
+    }
+
+    .sidebar-admin-divider-line {
+      display: block;
+      width: 100%;
+      height: 1px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 1px;
+    }
+  }
+
+  .ant-pro-sider.ant-pro-sider-collapsed {
+    ::v-deep li.ant-menu-item.sidebar-admin-divider {
+      margin: 8px 12px !important;
+    }
+  }
+
   .ant-layout-sider-children {
     padding-bottom: calc(var(--menu-footer-height, 220px) + 12px);
     overflow-y: auto;
@@ -980,6 +1117,10 @@ export default {
 /* 暗黑主题样式 */
 .basic-layout-wrapper.dark,
 .basic-layout-wrapper.realdark {
+  ::v-deep li.ant-menu-item.sidebar-admin-divider .sidebar-admin-divider-line {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
   /* Header 适配 - 与侧栏亮黑 #111 一致 + 顶缘内高光 */
   .ant-layout-header {
     background: #111111 !important;

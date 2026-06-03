@@ -16,6 +16,7 @@
         @edit="handleEditBot"
         @delete="handleDeleteBot"
         @clone-as-script="handleCloneAsScript"
+        @publish="openPublishPresetModal"
         @close="viewMode = 'list'; selectedBot = null"
       />
     </template>
@@ -26,6 +27,12 @@
         <div class="page-header-left">
           <h2 class="page-title"><a-icon type="robot" class="title-icon" /> {{ $t('trading-bot.pageTitle') }}</h2>
           <p class="page-subtitle">{{ $t('trading-bot.pageSubtitle') }}</p>
+        </div>
+        <div class="page-header-right">
+          <a-button @click="goToMarketplace">
+            <a-icon type="shop" />
+            {{ $t('trading-bot.action.openMarketplace') }}
+          </a-button>
         </div>
       </div>
 
@@ -114,12 +121,39 @@
         @updated="handleBotUpdated"
       />
     </a-modal>
+
+    <a-modal
+      :visible="showPublishPresetModal"
+      :title="$t('trading-bot.publish.title')"
+      :confirm-loading="publishingPreset"
+      @ok="submitPublishPreset"
+      @cancel="showPublishPresetModal = false"
+    >
+      <a-form layout="vertical">
+        <a-form-item :label="$t('trading-bot.publish.name')">
+          <a-input v-model="publishForm.name" />
+        </a-form-item>
+        <a-form-item :label="$t('trading-bot.publish.description')">
+          <a-textarea v-model="publishForm.description" :rows="3" />
+        </a-form-item>
+        <a-form-item :label="$t('trading-bot.publish.pricingType')">
+          <a-radio-group v-model="publishForm.pricingType">
+            <a-radio value="free">{{ $t('community.free') }}</a-radio>
+            <a-radio value="paid">{{ $t('community.paidOnly') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="publishForm.pricingType === 'paid'" :label="$t('trading-bot.publish.price')">
+          <a-input-number v-model="publishForm.price" :min="0" :step="1" style="width: 100%" />
+        </a-form-item>
+        <a-alert type="info" show-icon :message="$t('trading-bot.publish.hint')" />
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script>
 import { baseMixin } from '@/store/app-mixin'
-import { getStrategyList, startStrategy, stopStrategy, deleteStrategy, createStrategy } from '@/api/strategy'
+import { getStrategyList, startStrategy, stopStrategy, deleteStrategy, createStrategy, publishBotPreset } from '@/api/strategy'
 import { getUserInfo } from '@/api/login'
 import BotTypeCards from './components/BotTypeCards.vue'
 import BotCreateWizard from './components/BotCreateWizard.vue'
@@ -143,7 +177,16 @@ export default {
       actionLoadingId: null,
       showAiDialog: false,
       aiPreset: null,
-      editingBot: null
+      editingBot: null,
+      showPublishPresetModal: false,
+      publishingPreset: false,
+      publishTargetBot: null,
+      publishForm: {
+        name: '',
+        description: '',
+        pricingType: 'free',
+        price: 0
+      }
     }
   },
   computed: {
@@ -199,18 +242,28 @@ export default {
       this.userId = 1
     }
     this.loadBots()
-    const q = this.$route.query
-    if (q.strategy_id) {
-      this.$nextTick(() => {
-        const found = this.bots.find(b => b.id === Number(q.strategy_id))
-        if (found) {
-          this.selectedBot = found
-          this.viewMode = 'detail'
-        }
-      })
+    this.handleRouteQuery()
+  },
+  watch: {
+    '$route.query' () {
+      this.handleRouteQuery()
     }
   },
   methods: {
+    handleRouteQuery () {
+      const q = this.$route.query
+      if (!q || !q.strategy_id) return
+      const sid = Number(q.strategy_id)
+      if (!sid) return
+      const found = this.bots.find(b => b.id === sid)
+      if (!found) return
+      if (q.action === 'edit') {
+        this.handleEditBot(found)
+        return
+      }
+      this.selectedBot = found
+      this.viewMode = 'detail'
+    },
     async loadBots () {
       this.loading = true
       try {
@@ -226,14 +279,7 @@ export default {
           const updated = this.bots.find(b => b.id === this.selectedBot.id)
           if (updated) this.selectedBot = updated
         }
-        const q = this.$route.query
-        if (q.strategy_id && !this.selectedBot) {
-          const found = this.bots.find(b => b.id === Number(q.strategy_id))
-          if (found) {
-            this.selectedBot = found
-            this.viewMode = 'detail'
-          }
-        }
+        this.$nextTick(() => this.handleRouteQuery())
       } catch {
         this.bots = []
       } finally {
@@ -347,6 +393,48 @@ export default {
     goToScriptStrategies () {
       this.$router.push({ path: '/strategy-script' })
     },
+    goToMarketplace () {
+      this.$router.push({ path: '/indicator-community', query: { asset_type: 'bot_preset' } })
+    },
+    openPublishPresetModal (bot) {
+      if (!bot || !bot.id) return
+      this.publishTargetBot = bot
+      const tc = bot.trading_config || {}
+      const botType = bot.bot_type || tc.bot_type || ''
+      const typeLabel = botType ? this.$t(`trading-bot.type.${botType}`) : ''
+      this.publishForm = {
+        name: bot.strategy_name || '',
+        description: typeLabel
+          ? this.$t('trading-bot.publish.defaultDescription', { type: typeLabel })
+          : '',
+        pricingType: 'free',
+        price: 0
+      }
+      this.showPublishPresetModal = true
+    },
+    async submitPublishPreset () {
+      if (!this.publishTargetBot || !this.publishTargetBot.id) return
+      this.publishingPreset = true
+      try {
+        const res = await publishBotPreset({
+          strategyId: this.publishTargetBot.id,
+          name: this.publishForm.name,
+          description: this.publishForm.description,
+          pricingType: this.publishForm.pricingType,
+          price: this.publishForm.pricingType === 'paid' ? this.publishForm.price : 0
+        })
+        if (res.code === 1) {
+          this.$message.success(this.$t('trading-bot.publish.success'))
+          this.showPublishPresetModal = false
+        } else {
+          this.$message.error(res.msg || this.$t('trading-bot.publish.failed'))
+        }
+      } catch (e) {
+        this.$message.error(this.$t('trading-bot.publish.failed'))
+      } finally {
+        this.publishingPreset = false
+      }
+    },
     /**
      * Clone the current bot as an editable Python "script" strategy.
      *
@@ -406,6 +494,10 @@ export default {
             const res = await createStrategy(payload)
             if (res && res.code === 1) {
               const newId = res.data && res.data.id
+              const tc = bot.trading_config || {}
+              if (String(tc.bot_type || '').toLowerCase() === 'grid') {
+                this.$message.info(this.$t('trading-bot.cloneAsScript.gridPlaceholderHint'))
+              }
               const h = this.$createElement
               const link = newId ? h('a', {
                 attrs: { href: `/strategy-script?strategy_id=${newId}&mode=edit` },
@@ -488,6 +580,11 @@ export default {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
+
+  .page-header-right {
+    flex-shrink: 0;
+  }
 
   .page-title {
     font-size: 22px;

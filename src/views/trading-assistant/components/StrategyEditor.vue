@@ -1,7 +1,7 @@
 <template>
   <div class="strategy-editor" :class="{ 'theme-dark': isDark }">
-    <a-row :gutter="16" class="editor-layout">
-      <a-col :xs="24" :md="16" class="code-col">
+    <div class="editor-layout">
+      <div class="code-col">
         <div class="code-section">
           <div class="section-header">
             <div class="section-title-wrap">
@@ -30,9 +30,9 @@
           </div>
           <div ref="editorContainer" class="code-editor-container"></div>
         </div>
-      </a-col>
+      </div>
 
-      <a-col :xs="24" :md="8" class="side-col">
+      <div class="side-col">
         <a-tabs v-model="activeTab" size="small" class="side-tabs" :animated="false">
           <a-tab-pane key="templates" :tab="$t('trading-assistant.editor.templateTab')" :force-render="true">
             <div class="panel-intro panel-intro--compact">
@@ -121,7 +121,19 @@
                   </div>
                   <div v-if="getParamDescription(param)" class="param-item__desc">{{ getParamDescription(param) }}</div>
                   <a-input-number
-                    v-if="param.type === 'number' || param.type === 'integer' || param.type === 'percent'"
+                    v-if="param.type === 'percent'"
+                    :value="templateParamValues[param.name]"
+                    :min="param.min"
+                    :max="param.max"
+                    :step="param.step || 1"
+                    :precision="getParamPrecision(param)"
+                    :formatter="formatPercentInput"
+                    :parser="parsePercentInput"
+                    style="width: 100%"
+                    @change="handleNumericParamChange(param, $event)"
+                  />
+                  <a-input-number
+                    v-else-if="param.type === 'number' || param.type === 'integer'"
                     :value="templateParamValues[param.name]"
                     :min="param.min"
                     :max="param.max"
@@ -272,8 +284,8 @@
           </a-tab-pane>
 
         </a-tabs>
-      </a-col>
-    </a-row>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -292,7 +304,8 @@ import {
   SCRIPT_TEMPLATE_CATALOG,
   getScriptTemplateByKey,
   buildTemplateCode,
-  buildTemplateParamValues
+  buildTemplateParamValues,
+  normalizePercentParamValue
 } from './scriptTemplateCatalog'
 
 export default {
@@ -301,6 +314,7 @@ export default {
     value: { type: String, default: '' },
     isDark: { type: Boolean, default: false },
     userId: { type: [Number, String], default: 1 },
+    strategyId: { type: [Number, String], default: null },
     visible: { type: Boolean, default: false },
     initialTemplateKey: { type: String, default: '' }
   },
@@ -317,7 +331,8 @@ export default {
       selectedTemplateKey: '',
       templateParamValues: {},
       templateDirty: false,
-      refreshTimer: null
+      refreshTimer: null,
+      refreshTimers: []
     }
   },
   computed: {
@@ -360,10 +375,7 @@ export default {
   },
   beforeDestroy () {
     window.removeEventListener('resize', this.scheduleEditorRefresh)
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer)
-      this.refreshTimer = null
-    }
+    this.clearRefreshTimers()
     if (this.editor) {
       if (typeof this.editor.toTextArea === 'function') {
         this.editor.toTextArea()
@@ -415,6 +427,7 @@ export default {
         indentUnit: 4,
         indentWithTabs: false,
         lineWrapping: false,
+        fixedGutter: true,
         viewportMargin: Infinity,
         gutters: ['CodeMirror-linenumbers']
       })
@@ -424,15 +437,30 @@ export default {
       this.scheduleEditorRefresh()
     },
 
-    scheduleEditorRefresh () {
+    refreshEditorLayout () {
+      if (!this.editor) return
+      this.editor.refresh()
+      const scroller = this.editor.getScrollerElement && this.editor.getScrollerElement()
+      if (scroller && scroller.scrollLeft !== 0) {
+        scroller.scrollLeft = 0
+      }
+    },
+
+    clearRefreshTimers () {
       if (this.refreshTimer) {
         clearTimeout(this.refreshTimer)
+        this.refreshTimer = null
       }
-      this.refreshTimer = setTimeout(() => {
-        if (this.editor) {
-          this.editor.refresh()
-        }
-      }, 60)
+      this.refreshTimers.forEach((id) => clearTimeout(id))
+      this.refreshTimers = []
+    },
+
+    scheduleEditorRefresh () {
+      this.clearRefreshTimers()
+      ;[0, 60, 280].forEach((delay) => {
+        const timerId = setTimeout(() => this.refreshEditorLayout(), delay)
+        this.refreshTimers.push(timerId)
+      })
     },
 
     _getDefaultCode () {
@@ -555,6 +583,16 @@ def on_bar(ctx, bar):
       return this.$t(`trading-assistant.editor.paramType.${type}`)
     },
 
+    formatPercentInput (value) {
+      if (value === '' || value === null || value === undefined) return ''
+      return `${value}%`
+    },
+
+    parsePercentInput (value) {
+      if (value === '' || value === null || value === undefined) return ''
+      return String(value).replace(/%/g, '').trim()
+    },
+
     getOptionLabel (option) {
       if (!option) return ''
       if (option.labelKey) {
@@ -649,10 +687,15 @@ def on_bar(ctx, bar):
         const res = await request({
           url: '/api/strategies/verify-code',
           method: 'post',
-          data: { code, user_id: this.userId }
+          data: {
+            code,
+            user_id: this.userId,
+            strategyId: this.strategyId || undefined
+          }
         })
         if (res && res.success) {
           message.success(this.$t('trading-assistant.editor.verifySuccess'))
+          this.$emit('verified')
         } else {
           message.error((res && (res.msg || res.message)) || this.$t('trading-assistant.editor.verifyFailed'))
         }
@@ -683,7 +726,7 @@ def on_bar(ctx, bar):
       if (t === 'number' || t === 'percent') {
         const n = Number(raw)
         if (!Number.isFinite(n)) return undefined
-        let v = n
+        let v = t === 'percent' ? (normalizePercentParamValue(n) ?? n) : n
         if (param.min != null) v = Math.max(param.min, v)
         if (param.max != null) v = Math.min(param.max, v)
         return v
@@ -798,18 +841,44 @@ def on_bar(ctx, bar):
 <style lang="less" scoped>
 .strategy-editor {
   width: 100%;
+  min-width: 0;
+  overflow: visible;
 }
 
 .editor-layout {
   min-height: 450px;
   display: flex;
   align-items: stretch;
+  gap: 16px;
+  min-width: 0;
 }
 
-.code-col,
+.code-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 62%;
+  min-width: 0;
+}
+
 .side-col {
   display: flex;
   flex-direction: column;
+  flex: 0 0 38%;
+  min-width: 260px;
+  max-width: 380px;
+}
+
+@media (max-width: 768px) {
+  .editor-layout {
+    flex-direction: column;
+  }
+
+  .code-col,
+  .side-col {
+    flex: 1 1 auto;
+    max-width: none;
+    min-width: 0;
+  }
 }
 
 .code-section {
@@ -819,6 +888,7 @@ def on_bar(ctx, bar):
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .section-header {
@@ -858,9 +928,11 @@ def on_bar(ctx, bar):
 .code-editor-container {
   flex: 1;
   min-height: 420px;
+  min-width: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 
   /deep/ .CodeMirror {
     flex: 1;
@@ -878,24 +950,27 @@ def on_bar(ctx, bar):
   }
 
   /deep/ .CodeMirror-gutters {
+    flex-shrink: 0;
     border-right: 1px solid #e8e8e8;
     background: linear-gradient(to right, #fafafa 0%, #f5f5f5 100%);
   }
 
   /deep/ .CodeMirror-linenumber {
-    padding: 0 8px 0 0;
+    min-width: 2ch;
+    padding: 0 8px 0 4px;
     text-align: right;
     color: #999;
     font-size: 12px;
   }
 
   /deep/ .CodeMirror-lines {
-    padding: 12px 0;
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
   /deep/ .CodeMirror pre.CodeMirror-line,
   /deep/ .CodeMirror pre.CodeMirror-line-like {
-    padding: 0 12px 0 12px;
+    padding: 0 12px;
   }
 
   /deep/ .CodeMirror-cursor {

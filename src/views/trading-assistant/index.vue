@@ -1,5 +1,11 @@
 <template>
-  <div class="trading-assistant" :class="{ 'theme-dark': isDarkTheme }">
+  <div class="trading-assistant" :class="{ 'theme-dark': isDarkTheme, 'trading-assistant--signal': isIndicatorSignalOnlyPage, 'trading-assistant--script': isScriptStrategiesOnlyPage }">
+    <div v-if="pageTypeBanner" class="assistant-page-banner" :class="`assistant-page-banner--${pageTypeBanner.variant}`">
+      <div class="assistant-page-banner-main">
+        <span class="assistant-page-banner-badge">{{ pageTypeBanner.badge }}</span>
+        <span class="assistant-page-banner-desc">{{ pageTypeBanner.desc }}</span>
+      </div>
+    </div>
     <div v-if="showAssistantGuide" class="assistant-guide-bar">
       <div class="assistant-guide-copy">
         <div class="assistant-guide-eyebrow">{{ $t('trading-assistant.guide.eyebrow') }}</div>
@@ -48,12 +54,6 @@
       class="top-level-tabs"
       :animated="false"
     >
-      <a-tab-pane
-        v-if="!isScriptStrategiesOnlyPage"
-        key="overview"
-        :tab="$t('trading-assistant.tabs.overview')">
-        <dashboard-overview v-if="topTab === 'overview'" :hide-setup-guide="true" />
-      </a-tab-pane>
       <a-tab-pane key="strategy" :tab="$t('trading-assistant.tabs.strategyManage')">
         <a-row :gutter="24" class="strategy-layout">
           <!-- 左侧：策略列表 -->
@@ -69,7 +69,7 @@
                 <span>{{ $t('trading-assistant.strategyList') }}</span>
                 <a-button type="primary" size="small" @click="handleCreateStrategy">
                   <a-icon type="plus" />
-                  {{ $t('trading-assistant.createStrategy') }}
+                  {{ createStrategyButtonLabel }}
                 </a-button>
               </div>
 
@@ -377,7 +377,7 @@
                 <div class="strategy-empty-detail-actions">
                   <a-button type="primary" @click="handleCreateStrategy">
                     <a-icon type="plus" />
-                    {{ $t('trading-assistant.createStrategy') }}
+                    {{ createStrategyButtonLabel }}
                   </a-button>
                 </div>
               </div>
@@ -435,6 +435,26 @@
                       </div>
                     </div>
 
+                    <!-- 生命周期：脚本页显示验证/回测；指标页引导去 IDE -->
+                    <div v-if="selectedStrategy" class="strategy-lifecycle-tags">
+                      <template v-if="isScriptStrategySelected">
+                        <a-tag v-if="isStrategyVerified(selectedStrategy)" color="green">{{ $t('strategyCenter.lifecycle.verified') }}</a-tag>
+                        <a-tag v-else color="orange">{{ $t('strategyCenter.lifecycle.unverified') }}</a-tag>
+                        <a-tag v-if="strategyHasBacktest" color="blue">{{ $t('strategyCenter.lifecycle.backtested') }}</a-tag>
+                        <a-tag v-else color="default">{{ $t('strategyCenter.lifecycle.notBacktested') }}</a-tag>
+                      </template>
+                      <a-button
+                        v-else-if="isIndicatorSignalOnlyPage"
+                        type="link"
+                        size="small"
+                        class="lifecycle-ide-btn"
+                        @click="goToIndicatorIdeForBacktest"
+                      >
+                        <a-icon type="line-chart" />
+                        {{ $t('trading-assistant.backtestInIde') }}
+                      </a-button>
+                    </div>
+
                     <!-- 策略详情标签 -->
                     <div class="strategy-tags">
                       <div class="tag-item" v-if="isCrossSectionalStrategy(selectedStrategy)">
@@ -477,6 +497,14 @@
                   </div>
                   <div class="header-right">
                     <a-button
+                      v-if="isScriptStrategySelected"
+                      class="action-btn publish-market-btn"
+                      @click="openPublishTemplateModal"
+                    >
+                      <a-icon type="shop" />
+                      {{ $t('strategyCenter.publish.action') }}
+                    </a-button>
+                    <a-button
                       v-if="selectedStrategy.status === 'stopped'"
                       type="primary"
                       size="large"
@@ -500,14 +528,13 @@
 
               <!-- 策略详情标签页 -->
               <a-card :bordered="false" class="strategy-content-card">
-                <a-tabs defaultActiveKey="positions">
+                <a-tabs v-model="detailTab">
                   <a-tab-pane key="positions" :tab="$t('trading-assistant.tabs.positions')">
                     <position-records
                       :strategy-id="selectedStrategy.id"
                       :execution-mode="selectedStrategy.execution_mode || 'signal'"
                       :market-type="(selectedStrategy.trading_config && selectedStrategy.trading_config.market_type) || 'swap'"
                       :leverage="(selectedStrategy.trading_config && selectedStrategy.trading_config.leverage) || 1"
-                      :credential-id="strategyCredentialId"
                       :loading="loadingRecords"
                       :is-dark="isDarkTheme" />
                   </a-tab-pane>
@@ -521,6 +548,17 @@
                     <performance-analysis
                       :strategy-id="selectedStrategy.id"
                       :is-dark="isDarkTheme" />
+                  </a-tab-pane>
+                  <a-tab-pane v-if="showStrategyDetailBacktest" key="backtest" :tab="$t('strategyCenter.tabs.backtest')">
+                    <strategy-backtest-panel
+                      v-if="selectedStrategy"
+                      ref="strategyBacktestPanel"
+                      :strategy-id="selectedStrategy.id"
+                      :strategy="selectedStrategy"
+                      :is-dark="isDarkTheme"
+                      @backtested="onStrategyBacktested"
+                      @history-loaded="onBacktestHistoryLoaded"
+                    />
                   </a-tab-pane>
                   <a-tab-pane key="logs" :tab="$t('trading-assistant.tabs.logs')">
                     <strategy-logs
@@ -555,6 +593,7 @@
         <!-- 创建/编辑策略弹窗 - 合并版本 -->
         <a-modal
           :visible="showFormModal"
+          :destroy-on-close="true"
           :title="editingStrategy ? $t('trading-assistant.editStrategy') : $t('trading-assistant.createStrategy') + (strategyMode === 'script' ? ' - ' + $t('trading-assistant.strategyMode.script') : '')"
           :width="isMobile ? '95%' : 1120"
           :confirmLoading="saving"
@@ -566,9 +605,9 @@
           <a-spin :spinning="loadingIndicators">
             <a-steps :current="displayCurrentStep" class="steps-container">
               <template v-if="strategyMode === 'script'">
-                <a-step :title="$t('trading-assistant.form.simpleStep1')" />
                 <a-step :title="$t('trading-assistant.editor.title')" />
-                <a-step :title="$t('trading-assistant.form.step3Signal')" />
+                <a-step :title="$t('trading-assistant.form.scriptStepParams')" />
+                <a-step :title="$t('trading-assistant.form.scriptStepSignalLive')" />
               </template>
               <template v-else>
                 <a-step :title="$t('trading-assistant.form.stepMergedConfig')" />
@@ -577,8 +616,31 @@
             </a-steps>
 
             <div class="form-container">
-              <!-- 步骤1: 指标策略-选择技术指标 / 脚本策略-基础配置 -->
+              <!-- 步骤1: 指标策略-选择技术指标 / 脚本策略-编写代码 -->
               <div v-show="currentStep === 0" class="step-content">
+                <!-- 脚本策略：先写代码 -->
+                <div v-if="strategyMode === 'script'">
+                  <a-alert
+                    type="info"
+                    show-icon
+                    style="margin-bottom: 12px;"
+                    :message="$t('trading-assistant.editor.title')"
+                    :description="$t('trading-assistant.form.scriptStepCodeHint')"
+                  />
+                  <strategy-editor
+                    ref="strategyEditor"
+                    :key="strategyEditorKey"
+                    v-model="strategyCode"
+                    :is-dark="isDarkTheme"
+                    :user-id="1"
+                    :strategy-id="editingStrategy && editingStrategy.id ? editingStrategy.id : null"
+                    :visible="showFormModal && strategyMode === 'script' && currentStep === 0"
+                    :initial-template-key="pendingScriptTemplateKey"
+                    @template-change="onScriptTemplateChange"
+                    @verified="onScriptVerified"
+                  />
+                </div>
+
                 <!-- 指标策略：选择技术指标 -->
                 <div v-if="strategyType === 'indicator' && strategyMode !== 'script'">
                   <a-form :form="form" layout="vertical">
@@ -1016,8 +1078,11 @@
                     </div>
                   </a-form>
                 </div>
+              </div>
 
-                <div v-if="strategyMode === 'script'">
+              <!-- 脚本策略步骤2：策略参数 -->
+              <div v-if="strategyMode === 'script'" v-show="currentStep === 1" class="step-content">
+                <div>
                   <a-form :form="form" layout="vertical">
                     <a-form-item :label="$t('trading-assistant.form.strategyName')">
                       <a-input
@@ -1126,20 +1191,7 @@
                 </div>
               </div>
 
-              <!-- Step 1.5 (Script mode): Strategy Code Editor -->
-              <div v-if="strategyMode === 'script'" v-show="currentStep === 1" class="step-content">
-                <strategy-editor
-                  ref="strategyEditor"
-                  v-model="strategyCode"
-                  :is-dark="isDarkTheme"
-                  :user-id="1"
-                  :visible="showFormModal && strategyMode === 'script' && currentStep === 1"
-                  :initial-template-key="pendingScriptTemplateKey"
-                  @template-change="onScriptTemplateChange"
-                />
-              </div>
-
-              <!-- 指标策略：执行/通知（步进 1）；脚本策略：步进 2 -->
+              <!-- 指标策略：执行/通知（步进 1）；脚本策略：信号 & 实盘（步进 2） -->
               <div
                 v-show="(strategyMode === 'script' && currentStep === 2) || (strategyMode !== 'script' && currentStep === 1)"
                 class="step-content">
@@ -1460,11 +1512,37 @@
       :visible.sync="showExchangeAccountModal"
       @success="handleExchangeAccountCreated"
     />
+
+    <a-modal
+      :visible="showPublishTemplateModal"
+      :title="$t('strategyCenter.publish.title')"
+      :confirm-loading="publishingTemplate"
+      @ok="submitPublishTemplate"
+      @cancel="showPublishTemplateModal = false"
+    >
+      <a-form layout="vertical">
+        <a-form-item :label="$t('strategyCenter.publish.name')">
+          <a-input v-model="publishForm.name" />
+        </a-form-item>
+        <a-form-item :label="$t('strategyCenter.publish.description')">
+          <a-textarea v-model="publishForm.description" :rows="3" />
+        </a-form-item>
+        <a-form-item :label="$t('strategyCenter.publish.pricingType')">
+          <a-radio-group v-model="publishForm.pricingType">
+            <a-radio value="free">{{ $t('community.free') }}</a-radio>
+            <a-radio value="paid">{{ $t('community.paidOnly') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item v-if="publishForm.pricingType === 'paid'" :label="$t('strategyCenter.publish.price')">
+          <a-input-number v-model="publishForm.price" :min="0" :step="1" style="width: 100%" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <script>
-import { getStrategyList, startStrategy, stopStrategy, deleteStrategy, updateStrategy, createStrategy, getStrategyEquityCurve, getStrategyPositions, batchCreateStrategies, batchStartStrategies, batchStopStrategies, batchDeleteStrategies } from '@/api/strategy'
+import { getStrategyList, getStrategyDetail, startStrategy, stopStrategy, deleteStrategy, updateStrategy, createStrategy, getStrategyEquityCurve, getStrategyPositions, batchCreateStrategies, batchStartStrategies, batchStopStrategies, batchDeleteStrategies, getStrategyBacktestHistory, publishStrategyTemplate, verifyStrategyCode } from '@/api/strategy'
 import { getWatchlist, addWatchlist, searchSymbols, getHotSymbols } from '@/api/market'
 import { listExchangeCredentials } from '@/api/credentials'
 import { formatExchangeCredentialLabel } from '@/utils/exchangeCredential'
@@ -1477,8 +1555,8 @@ import StrategyTypeSelector from './components/StrategyTypeSelector.vue'
 import StrategyEditor from './components/StrategyEditor.vue'
 import PerformanceAnalysis from './components/PerformanceAnalysis.vue'
 import StrategyLogs from './components/StrategyLogs.vue'
-import DashboardOverview from '@/views/dashboard/index.vue'
 import ExchangeAccountModal from '@/components/ExchangeAccountModal/ExchangeAccountModal.vue'
+import StrategyBacktestPanel from '@/components/StrategyBacktestPanel.vue'
 import { CROSS_SECTIONAL_INDICATOR_TEMPLATE } from '@/constants/crossSectionalIndicatorTemplate'
 
 // 常见加密货币交易对
@@ -1529,20 +1607,39 @@ export default {
     StrategyEditor,
     PerformanceAnalysis,
     StrategyLogs,
-    DashboardOverview,
-    ExchangeAccountModal
+    ExchangeAccountModal,
+    StrategyBacktestPanel
   },
   computed: {
     showAssistantGuide () {
       if (this.$route.meta && this.$route.meta.scriptStrategiesOnly) return false
       return !this.assistantGuideDismissed
     },
-    strategyCredentialId () {
-      const st = this.selectedStrategy
-      if (!st || !st.exchange_config || typeof st.exchange_config !== 'object') return 0
-      const raw = st.exchange_config.credential_id || st.exchange_config.credentials_id
-      const n = parseInt(raw, 10)
-      return Number.isFinite(n) && n > 0 ? n : 0
+    pageTypeBanner () {
+      if (this.isScriptStrategiesOnlyPage) {
+        return {
+          variant: 'script',
+          badge: this.$t('trading-assistant.pageBanner.script.badge'),
+          desc: this.$t('trading-assistant.pageBanner.script.desc')
+        }
+      }
+      if (this.isIndicatorSignalOnlyPage) {
+        return {
+          variant: 'signal',
+          badge: this.$t('trading-assistant.pageBanner.signal.badge'),
+          desc: this.$t('trading-assistant.pageBanner.signal.desc')
+        }
+      }
+      return null
+    },
+    createStrategyButtonLabel () {
+      if (this.isScriptStrategiesOnlyPage) {
+        return this.$t('trading-assistant.createScriptStrategy')
+      }
+      if (this.isIndicatorSignalOnlyPage) {
+        return this.$t('trading-assistant.createIndicatorStrategy')
+      }
+      return this.$t('trading-assistant.createStrategy')
     },
     assistantGuideStorageKey () {
       const userId = this.$store.getters.userInfo?.id || 'guest'
@@ -1813,9 +1910,12 @@ export default {
     isScriptStrategiesOnlyPage () {
       return !!(this.$route.meta && this.$route.meta.scriptStrategiesOnly)
     },
-    /** Script 策略页暂无可用回测 UI（/backtest-center 已重定向），隐藏列表回测入口 */
+    /** 脚本/机器人策略页展示回测；指标策略页回测在指标 IDE */
     showStrategyListBacktest () {
-      return !this.isScriptStrategiesOnlyPage
+      return !this.isIndicatorSignalOnlyPage
+    },
+    showStrategyDetailBacktest () {
+      return !this.isIndicatorSignalOnlyPage
     },
     isIndicatorSignalOnlyPage () {
       return !!(this.$route.meta && this.$route.meta.indicatorSignalOnly)
@@ -1953,6 +2053,15 @@ export default {
       // if (this.notifyChannelsUi.includes('phone') && !this.userNotificationSettings.phone) { ... }
 
       return missing
+    },
+    isScriptStrategySelected () {
+      const s = this.selectedStrategy
+      if (!s) return false
+      return s.strategy_mode === 'script' || s.strategy_type === 'ScriptStrategy'
+    },
+    strategyEditorKey () {
+      const id = this.editingStrategy && this.editingStrategy.id
+      return id ? `script-editor-${id}` : `script-editor-new-${this.pendingScriptTemplateKey || 'blank'}`
     }
   },
   watch: {
@@ -1968,15 +2077,30 @@ export default {
         }
       },
       deep: true
+    },
+    detailTab (tab) {
+      if (tab === 'backtest' && !this.showStrategyDetailBacktest) {
+        this.detailTab = 'positions'
+      }
     }
   },
   data () {
     return {
-      topTab: 'overview',
+      topTab: 'strategy',
       loading: false,
       loadingRecords: false,
       strategies: [],
       selectedStrategy: null,
+      detailTab: 'positions',
+      strategyHasBacktest: false,
+      showPublishTemplateModal: false,
+      publishingTemplate: false,
+      publishForm: {
+        name: '',
+        description: '',
+        pricingType: 'free',
+        price: 0
+      },
       showFormModal: false,
       pendingRouteIndicatorId: '',
       lastAutoStrategyName: '',
@@ -2833,6 +2957,18 @@ export default {
         this.$nextTick(() => this.handleEditStrategy(found))
       }
     },
+    async fetchStrategyDetailForEdit (strategy) {
+      if (!strategy || !strategy.id) return strategy
+      try {
+        const res = await getStrategyDetail(strategy.id)
+        if (res && res.code === 1 && res.data) {
+          return { ...strategy, ...res.data }
+        }
+      } catch (e) {
+        // fall back to list row
+      }
+      return strategy
+    },
     handleCreateStrategy () {
       this.isEditMode = false
       this.editingStrategy = null
@@ -2846,11 +2982,12 @@ export default {
         return
       }
       if (this.isScriptStrategiesOnlyPage) {
-        this.strategyMode = ''
-        this.strategyCode = ''
+        this.strategyMode = 'script'
         this.pendingScriptTemplateKey = ''
-        this.showModeSelector = true
+        this.strategyCode = ''
+        this.showModeSelector = false
         this.showFormModal = false
+        this._openCreateModal()
         return
       }
       this.strategyMode = ''
@@ -2923,20 +3060,23 @@ export default {
         this.loadExchangeCredentials()
       })
     },
-    handleEditStrategy (strategy) {
+    async handleEditStrategy (strategy) {
       // 如果策略正在运行，提示用户先停止
       if (strategy.status === 'running') {
         this.$message.warning(this.$t('trading-assistant.messages.runningWarning'))
         return
       }
 
+      const isScript = strategy.strategy_mode === 'script' || strategy.strategy_type === 'ScriptStrategy'
+      const fullStrategy = isScript ? await this.fetchStrategyDetailForEdit(strategy) : strategy
+
       this.strategyType = 'indicator'
-      this.strategyMode = strategy.strategy_mode || 'signal'
-      this.strategyCode = strategy.strategy_code || ''
+      this.strategyMode = fullStrategy.strategy_mode === 'bot' ? 'script' : (fullStrategy.strategy_mode || 'signal')
+      this.strategyCode = fullStrategy.strategy_code || ''
       this.pendingScriptTemplateKey = ''
 
       this.isEditMode = true
-      this.editingStrategy = strategy
+      this.editingStrategy = fullStrategy
       this.csStrategyTypeUi = 'single'
       this.crossSectionalSymbols = []
       this.crossSectionalIndicatorCodeOverride = null
@@ -2958,7 +3098,7 @@ export default {
         this.loadWatchlist()
         this.loadIndicators()
         this.loadExchangeCredentials()
-        await this.loadStrategyDataToForm(strategy)
+        await this.loadStrategyDataToForm(fullStrategy)
       })
     },
     async loadStrategyDataToForm (strategy) {
@@ -3012,7 +3152,7 @@ export default {
         notify_webhook: strategy.notification_config?.targets?.webhook || ''
       })
 
-      const isScriptStrategy = strategy.strategy_mode === 'script' || strategy.strategy_type === 'ScriptStrategy'
+      const isScriptStrategy = strategy.strategy_mode === 'script' || strategy.strategy_mode === 'bot' || strategy.strategy_type === 'ScriptStrategy'
       if (isScriptStrategy) {
         const tc = strategy.trading_config || {}
         const rawSym = tc.symbol || strategy.symbol || ''
@@ -3161,6 +3301,8 @@ export default {
     handleSelectStrategy (strategy) {
       this.selectedStrategy = strategy
       this.currentEquity = null // 重置当前净值
+      this.detailTab = 'positions'
+      this.refreshStrategyBacktestFlag(strategy && strategy.id)
       this.loadStrategyDetails()
       this.startEquityPolling() // 开始轮询净值
     },
@@ -3276,13 +3418,80 @@ export default {
     },
     handleBacktestStrategy (strategy) {
       if (!strategy || !strategy.id) return
-      this.$router.push({
-        path: '/backtest-center',
-        query: {
-          tab: 'strategy',
-          strategy_id: String(strategy.id)
+      if (!this.showStrategyDetailBacktest) {
+        this.goToIndicatorIdeForBacktest(strategy)
+        return
+      }
+      this.handleSelectStrategy(strategy)
+      this.detailTab = 'backtest'
+    },
+    goToIndicatorIdeForBacktest (strategy) {
+      const st = strategy || this.selectedStrategy
+      const indId = st && st.indicator_config && st.indicator_config.indicator_id
+      const query = indId ? { indicator_id: String(indId) } : {}
+      this.$router.push({ path: '/indicator-ide', query })
+    },
+    isStrategyVerified (strategy) {
+      const tc = (strategy && strategy.trading_config) || {}
+      return !!(tc.lifecycle_verified || tc.script_verified)
+    },
+    onStrategyBacktested () {
+      this.strategyHasBacktest = true
+    },
+    onBacktestHistoryLoaded (rows) {
+      this.strategyHasBacktest = Array.isArray(rows) && rows.length > 0
+    },
+    onScriptVerified () {
+      if (this.editingStrategy && this.editingStrategy.trading_config) {
+        this.$set(this.editingStrategy.trading_config, 'lifecycle_verified', true)
+        this.$set(this.editingStrategy.trading_config, 'script_verified', true)
+      }
+      if (this.selectedStrategy && this.selectedStrategy.trading_config) {
+        this.$set(this.selectedStrategy.trading_config, 'lifecycle_verified', true)
+        this.$set(this.selectedStrategy.trading_config, 'script_verified', true)
+      }
+    },
+    openPublishTemplateModal () {
+      if (!this.selectedStrategy) return
+      this.publishForm = {
+        name: this.selectedStrategy.strategy_name || '',
+        description: '',
+        pricingType: 'free',
+        price: 0
+      }
+      this.showPublishTemplateModal = true
+    },
+    async submitPublishTemplate () {
+      if (!this.selectedStrategy || !this.selectedStrategy.id) return
+      this.publishingTemplate = true
+      try {
+        const res = await publishStrategyTemplate({
+          strategyId: this.selectedStrategy.id,
+          name: this.publishForm.name,
+          description: this.publishForm.description,
+          pricingType: this.publishForm.pricingType,
+          price: this.publishForm.pricingType === 'paid' ? this.publishForm.price : 0
+        })
+        if (res.code === 1) {
+          this.$message.success(this.$t('strategyCenter.publish.success'))
+          this.showPublishTemplateModal = false
+        } else {
+          this.$message.error(res.msg || this.$t('strategyCenter.publish.failed'))
         }
-      })
+      } catch (e) {
+        this.$message.error(this.$t('strategyCenter.publish.failed'))
+      } finally {
+        this.publishingTemplate = false
+      }
+    },
+    async refreshStrategyBacktestFlag (strategyId) {
+      if (!strategyId) return
+      try {
+        const res = await getStrategyBacktestHistory({ strategyId: Number(strategyId), limit: 1 })
+        this.strategyHasBacktest = res.code === 1 && Array.isArray(res.data) && res.data.length > 0
+      } catch (e) {
+        this.strategyHasBacktest = false
+      }
     },
     async handleGroupMenuClick (key, group) {
       const strategyIds = group.strategies.map(s => s.id)
@@ -3360,6 +3569,32 @@ export default {
       })
     },
     async handleStartStrategy (id) {
+      const strategy = this.selectedStrategy && this.selectedStrategy.id === id
+        ? this.selectedStrategy
+        : (this.strategies || []).find(s => s.id === id)
+      const isScript = strategy && (strategy.strategy_mode === 'script' || strategy.strategy_type === 'ScriptStrategy')
+      if (isScript) {
+        await this.refreshStrategyBacktestFlag(id)
+        if (!this.strategyHasBacktest) {
+          const ok = await new Promise(resolve => {
+            this.$confirm({
+              title: this.$t('strategyCenter.live.noBacktestTitle'),
+              content: this.$t('strategyCenter.live.noBacktestContent'),
+              okText: this.$t('strategyCenter.live.startAnyway'),
+              cancelText: this.$t('strategyCenter.live.goBacktest'),
+              onOk: () => resolve(true),
+              onCancel: () => {
+                if (strategy) {
+                  this.handleSelectStrategy(strategy)
+                  this.detailTab = 'backtest'
+                }
+                resolve(false)
+              }
+            })
+          })
+          if (!ok) return
+        }
+      }
       try {
         const res = await startStrategy(id)
         if (res.code === 1) {
@@ -3896,27 +4131,45 @@ export default {
       return fieldLabels[fieldType] || this.$t('trading-assistant.placeholders.inputApiKey')
     },
     // 表单步骤控制
-    handleNext () {
-      // ===== Script mode: 3 linear steps (0=basic, 1=code, 2=execution) =====
+    async handleNext () {
+      // ===== Script mode: code → params → signal/live =====
       if (this.strategyMode === 'script') {
         if (this.currentStep === 0) {
-          const fieldsToValidate = ['strategy_name', 'symbol', 'initial_capital', 'timeframe']
-          this.form.validateFields(fieldsToValidate, (err) => {
-            if (err) return
-            this.currentStep = 1
-          })
-        } else if (this.currentStep === 1) {
           if (!this.strategyCode || this.strategyCode.trim().length < 20) {
             this.$message.warning(this.$t('trading-assistant.editor.codeHint'))
             return
           }
+          this.saving = true
           try {
-            const execMode = this.form.getFieldValue('execution_mode') || 'signal'
-            this.executionModeUi = execMode
-            const chans = this.form.getFieldValue('notify_channels') || ['browser']
-            this.notifyChannelsUi = Array.isArray(chans) ? chans : ['browser']
-          } catch (e) { }
-          this.currentStep = 2
+            const res = await verifyStrategyCode({
+              code: this.strategyCode,
+              strategyId: this.editingStrategy && this.editingStrategy.id ? this.editingStrategy.id : undefined
+            })
+            if (!res || !res.success) {
+              this.$message.error((res && (res.message || res.msg)) || this.$t('trading-assistant.editor.verifyFailed'))
+              return
+            }
+            this.onScriptVerified()
+            this.currentStep = 1
+          } catch (e) {
+            this.$message.error(this.$t('trading-assistant.editor.verifyFailed') + ': ' + (e.message || ''))
+          } finally {
+            this.saving = false
+          }
+          return
+        }
+        if (this.currentStep === 1) {
+          const fieldsToValidate = ['strategy_name', 'symbol', 'initial_capital', 'timeframe']
+          this.form.validateFields(fieldsToValidate, (err) => {
+            if (err) return
+            try {
+              const execMode = this.form.getFieldValue('execution_mode') || 'signal'
+              this.executionModeUi = execMode
+              const chans = this.form.getFieldValue('notify_channels') || ['browser']
+              this.notifyChannelsUi = Array.isArray(chans) ? chans : ['browser']
+            } catch (e) { }
+            this.currentStep = 2
+          })
         }
         return
       }
@@ -4359,6 +4612,60 @@ export default {
   /deep/ .ant-tabs-ink-bar {
     background: #177ddc;
   }
+}
+
+.assistant-page-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+
+  &--signal {
+    background: linear-gradient(90deg, rgba(22, 119, 255, 0.1) 0%, rgba(22, 119, 255, 0.03) 100%);
+    border-color: rgba(22, 119, 255, 0.18);
+
+    .assistant-page-banner-badge {
+      background: rgba(22, 119, 255, 0.14);
+      color: #1677ff;
+    }
+  }
+
+  &--script {
+    background: linear-gradient(90deg, rgba(114, 46, 209, 0.1) 0%, rgba(114, 46, 209, 0.03) 100%);
+    border-color: rgba(114, 46, 209, 0.18);
+
+    .assistant-page-banner-badge {
+      background: rgba(114, 46, 209, 0.14);
+      color: #722ed1;
+    }
+  }
+}
+
+.assistant-page-banner-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.assistant-page-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.assistant-page-banner-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
 }
 
 .assistant-guide-bar {
@@ -5740,6 +6047,13 @@ export default {
               }
             }
 
+            .strategy-lifecycle-tags {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+              margin-bottom: 12px;
+            }
+
             // 策略标签
             .strategy-tags {
               display: flex;
@@ -5767,6 +6081,11 @@ export default {
 
           .header-right {
             flex-shrink: 0;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
 
             .action-btn {
               min-width: 120px;
@@ -5801,6 +6120,25 @@ export default {
 
                 &:hover {
                   box-shadow: 0 4px 12px rgba(246, 70, 93, 0.4);
+                }
+              }
+
+              &.publish-market-btn {
+                background: linear-gradient(135deg, #f8fafc 0%, #fff 100%);
+                border: 1px solid #c4b5fd;
+                color: #6d28d9;
+                box-shadow: 0 1px 4px rgba(109, 40, 217, 0.12);
+
+                &:hover,
+                &:focus {
+                  color: #5b21b6;
+                  border-color: #a78bfa;
+                  background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+                  box-shadow: 0 4px 12px rgba(109, 40, 217, 0.18);
+                }
+
+                .anticon {
+                  color: #7c3aed;
                 }
               }
             }
@@ -6299,6 +6637,20 @@ export default {
 }
 
 .theme-dark {
+  .assistant-page-banner-desc {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .assistant-page-banner--signal {
+    background: linear-gradient(90deg, rgba(22, 119, 255, 0.16) 0%, rgba(22, 119, 255, 0.05) 100%);
+    border-color: rgba(22, 119, 255, 0.28);
+  }
+
+  .assistant-page-banner--script {
+    background: linear-gradient(90deg, rgba(114, 46, 209, 0.16) 0%, rgba(114, 46, 209, 0.05) 100%);
+    border-color: rgba(114, 46, 209, 0.28);
+  }
+
   .assistant-guide-bar {
     border-color: rgba(23, 125, 220, 0.28);
     background: linear-gradient(135deg, rgba(23, 125, 220, 0.14) 0%, rgba(114, 46, 209, 0.12) 100%);

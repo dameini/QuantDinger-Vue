@@ -103,13 +103,13 @@ def on_bar(ctx, bar):
         if not _budget_ok(0, INIT_AMT):
             ctx.log("Budget exhausted (%.2f quote), skip opening" % BUDGET)
             return
-        entry_qty = INIT_AMT / price if price > 0 else 0
         if DIRECTION == "long":
             ctx.buy(price=price, amount=INIT_AMT)
             ctx.log("Layer 1: BUY %.2f quote @ %.4f" % (INIT_AMT, price))
         else:
             ctx.sell(price=price, amount=INIT_AMT)
             ctx.log("Layer 1: SELL %.2f quote @ %.4f" % (INIT_AMT, price))
+        entry_qty = INIT_AMT / price if price > 0 else 0
         ctx._params["layer"] = 1
         ctx._params["last_entry_price"] = price
         ctx._params["total_cost"] = INIT_AMT
@@ -202,13 +202,13 @@ def on_bar(ctx, bar):
         if not _budget_ok(cost, amt):
             ctx.log("Budget cap reached (cost=%.2f + amt=%.2f > %.2f quote), skip add layer %d" % (cost, amt, BUDGET, layer + 1))
             return
-        add_qty = amt / price if price > 0 else 0
         if DIRECTION == "long":
             ctx.buy(price=price, amount=amt)
             ctx.log("Layer %d: BUY %.2f quote @ %.4f" % (layer + 1, amt, price))
         else:
             ctx.sell(price=price, amount=amt)
             ctx.log("Layer %d: SELL %.2f quote @ %.4f" % (layer + 1, amt, price))
+        add_qty = amt / price if price > 0 else 0
         ctx._params["layer"] = layer + 1
         ctx._params["last_entry_price"] = price
         ctx._params["total_cost"] = cost + amt

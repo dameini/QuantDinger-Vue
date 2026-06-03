@@ -59,6 +59,11 @@
             <p class="description">{{ detail.description || $t('community.noDescription') }}</p>
           </div>
 
+          <div class="section" v-if="isBotPreset">
+            <h3>{{ $t('community.botPresetInfo') }}</h3>
+            <p class="description">{{ $t('community.botPresetUseHint') }}</p>
+          </div>
+
           <!--
             Performance panel.
 
@@ -76,7 +81,7 @@
                  run's symbol/timeframe/return/drawdown printed beneath
                  the chart title so the chart isn't context-less.
           -->
-          <div class="section" v-if="performance">
+          <div class="section" v-if="performance && !isBotPreset">
             <h3>{{ $t('community.performance') }}</h3>
 
             <div class="performance-grid">
@@ -287,7 +292,8 @@
                 </a-badge>
               </a-tooltip>
               <a-button type="primary" @click="goToUse">
-                <a-icon type="code" /> {{ $t('community.useNow') }}
+                <a-icon :type="isBotPreset ? 'robot' : (isScriptTemplate ? 'code-sandbox' : 'code')" />
+                {{ useNowLabel }}
               </a-button>
             </template>
             <a-button
@@ -377,6 +383,21 @@ export default {
     showYourPurchasePrice () {
       return !!(this.detail && this.detail.is_purchased &&
         Number(this.detail.your_purchase_price || 0) > 0)
+    },
+    isScriptTemplate () {
+      return (this.detail && this.detail.asset_type) === 'script_template'
+    },
+    isBotPreset () {
+      return (this.detail && this.detail.asset_type) === 'bot_preset'
+    },
+    useNowLabel () {
+      if (this.isScriptTemplate) {
+        return this.$t('community.useScriptStrategy')
+      }
+      if (this.isBotPreset) {
+        return this.$t('community.useBotPreset')
+      }
+      return this.$t('community.useNow')
     },
     hasEquityCurve () {
       return this.performance && Array.isArray(this.performance.equity_curve) &&
@@ -687,7 +708,14 @@ export default {
           method: 'post'
         })
         if (res.code === 1) {
-          this.$message.success(this.$t('community.purchaseSuccess'))
+          const assetType = res.data && res.data.asset_type
+          let successKey = 'community.purchaseSuccess'
+          if (assetType === 'script_template') {
+            successKey = 'community.scriptTemplatePurchased'
+          } else if (assetType === 'bot_preset') {
+            successKey = 'community.botPresetPurchased'
+          }
+          this.$message.success(this.$t(successKey))
           this.loadDetail()
           this.$emit('purchased')
         } else {
@@ -703,6 +731,31 @@ export default {
 
     goToUse () {
       this.$emit('close')
+      const assetType = (this.detail && this.detail.asset_type) || 'indicator'
+      if (assetType === 'script_template') {
+        const sid = this.detail && this.detail.purchased_strategy_id
+        if (sid) {
+          this.$router.push({
+            path: '/strategy-script',
+            query: { strategy_id: String(sid), mode: 'edit' }
+          })
+        } else {
+          this.$router.push({ path: '/strategy-script', query: { mode: 'create' } })
+        }
+        return
+      }
+      if (assetType === 'bot_preset') {
+        const sid = this.detail && this.detail.purchased_strategy_id
+        if (sid) {
+          this.$router.push({
+            path: '/trading-bot',
+            query: { strategy_id: String(sid), action: 'edit' }
+          })
+        } else {
+          this.$router.push('/trading-bot')
+        }
+        return
+      }
       this.$router.push('/indicator-ide')
     },
 

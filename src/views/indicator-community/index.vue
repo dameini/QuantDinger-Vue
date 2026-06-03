@@ -25,6 +25,16 @@
           <a-icon type="shop" />
           {{ $t('community.title') }}
         </h2>
+        <a-radio-group
+          v-model="marketAssetType"
+          button-style="solid"
+          class="market-asset-tabs"
+          @change="handleMarketAssetTypeChange"
+        >
+          <a-radio-button value="indicator">{{ $t('community.tabIndicators') }}</a-radio-button>
+          <a-radio-button value="script_template">{{ $t('community.tabScriptTemplates') }}</a-radio-button>
+          <a-radio-button value="bot_preset">{{ $t('community.tabBotPresets') }}</a-radio-button>
+        </a-radio-group>
       </div>
       <div class="header-right">
         <!-- 搜索 -->
@@ -68,9 +78,12 @@
     <template v-if="activeTab === 'market'">
       <a-spin :spinning="loading">
         <div v-if="indicators.length === 0 && !loading" class="empty-state">
-          <a-empty :description="$t('community.noIndicators')">
-            <a-button type="primary" @click="goToCreate">
+          <a-empty :description="marketEmptyDescription">
+            <a-button v-if="marketAssetType === 'indicator'" type="primary" @click="goToCreate">
               {{ $t('community.createFirst') }}
+            </a-button>
+            <a-button v-else-if="marketAssetType === 'bot_preset'" type="primary" @click="goToTradingBot">
+              {{ $t('community.createBotPreset') }}
             </a-button>
           </a-empty>
         </div>
@@ -270,8 +283,8 @@
               </template>
             </a-list-item-meta>
             <template #actions>
-              <a-button type="link" size="small" @click="goToUse">
-                {{ $t('community.useNow') }}
+              <a-button type="link" size="small" @click="goToUse(item)">
+                {{ usePurchaseActionLabel(item) }}
               </a-button>
             </template>
           </a-list-item>
@@ -314,11 +327,21 @@ export default {
       if (!this.userRole) return false
       const roleId = this.userRole.id || this.userRole
       return roleId === 'admin'
+    },
+    marketEmptyDescription () {
+      if (this.marketAssetType === 'script_template') {
+        return this.$t('community.scriptTemplatesEmpty')
+      }
+      if (this.marketAssetType === 'bot_preset') {
+        return this.$t('community.botPresetsEmpty')
+      }
+      return this.$t('community.noIndicators')
     }
   },
   data () {
     return {
       loading: false,
+      marketAssetType: 'indicator',
       indicators: [],
       filters: {
         keyword: '',
@@ -378,6 +401,10 @@ export default {
     }
   },
   mounted () {
+    const q = this.$route.query
+    if (q && q.asset_type) {
+      this.marketAssetType = String(q.asset_type)
+    }
     this.loadIndicators()
   },
   methods: {
@@ -392,7 +419,8 @@ export default {
             page_size: this.pagination.pageSize,
             keyword: this.filters.keyword || undefined,
             pricing_type: this.filters.pricingType || undefined,
-            sort_by: this.filters.sortBy
+            sort_by: this.filters.sortBy,
+            asset_type: this.marketAssetType
           }
         })
         if (res.code === 1) {
@@ -442,6 +470,11 @@ export default {
       this.loadIndicators()
     },
 
+    handleMarketAssetTypeChange () {
+      this.pagination.current = 1
+      this.loadIndicators()
+    },
+
     handlePageChange (page) {
       this.pagination.current = Number(page || 1)
       this.loadIndicators()
@@ -467,8 +500,49 @@ export default {
       this.$router.push('/indicator-ide')
     },
 
-    goToUse () {
+    goToTradingBot () {
+      this.$router.push('/trading-bot')
+    },
+
+    usePurchaseActionLabel (item) {
+      const assetType = item && item.indicator && item.indicator.asset_type
+      if (assetType === 'script_template') {
+        return this.$t('community.useScriptStrategy')
+      }
+      if (assetType === 'bot_preset') {
+        return this.$t('community.useBotPreset')
+      }
+      return this.$t('community.useNow')
+    },
+
+    goToUse (item) {
       this.showMyPurchases = false
+      const indicator = item && item.indicator
+      const assetType = (indicator && indicator.asset_type) || 'indicator'
+      if (assetType === 'script_template') {
+        const sid = (item && item.purchased_strategy_id) || (indicator && indicator.purchased_strategy_id)
+        if (sid) {
+          this.$router.push({
+            path: '/strategy-script',
+            query: { strategy_id: String(sid), mode: 'edit' }
+          })
+        } else {
+          this.$router.push({ path: '/strategy-script', query: { mode: 'create' } })
+        }
+        return
+      }
+      if (assetType === 'bot_preset') {
+        const sid = (item && item.purchased_strategy_id) || (indicator && indicator.purchased_strategy_id)
+        if (sid) {
+          this.$router.push({
+            path: '/trading-bot',
+            query: { strategy_id: String(sid), action: 'edit' }
+          })
+        } else {
+          this.$router.push('/trading-bot')
+        }
+        return
+      }
       this.$router.push('/indicator-ide')
     },
 
@@ -668,6 +742,10 @@ export default {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
     .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
       .page-title {
         margin: 0;
         font-size: 20px;
@@ -677,6 +755,10 @@ export default {
           margin-right: 8px;
           color: #1890ff;
         }
+      }
+
+      .market-asset-tabs {
+        align-self: flex-start;
       }
     }
 

@@ -122,7 +122,7 @@
                 </div>
               </template>
               <template v-else-if="marketData.calendar.length > 0">
-                <div v-for="evt in marketData.calendar.slice(0, 10)" :key="evt.id" class="cal-item" :class="evt.importance">
+                <div v-for="evt in marketData.calendar.slice(0, 10)" :key="`${evt.date}-${evt.time}-${evt.name_en}-${evt.country}`" class="cal-item" :class="evt.importance">
                   <span class="cal-date">{{ formatCalendarDate(evt.date) }}</span>
                   <span class="cal-time">{{ evt.time || '--:--' }}</span>
                   <span class="cal-flag">{{ getCountryFlag(evt.country) }}</span>
@@ -131,7 +131,7 @@
                     <a-icon v-if="getImpactClass(evt) === 'bullish'" type="arrow-up" />
                     <a-icon v-else-if="getImpactClass(evt) === 'bearish'" type="arrow-down" />
                     <a-icon v-else type="minus" />
-                    {{ evt.actual || evt.forecast || '--' }}
+                    {{ formatCalendarValue(evt) }}
                   </span>
                 </div>
               </template>
@@ -1667,7 +1667,7 @@ export default {
       }
       this.loadingCalendar = true
       try {
-        const res = await getEconomicCalendar()
+        const res = await getEconomicCalendar({ force: force ? '1' : undefined })
         if (res?.code === 1) {
           const next = res.data || []
           this.marketData.calendar = next
@@ -1803,6 +1803,11 @@ export default {
     },
     getImpactClass (evt) {
       return evt.actual_impact || evt.expected_impact || 'neutral'
+    },
+    formatCalendarValue (evt) {
+      const val = evt && (evt.actual || evt.forecast)
+      if (val == null || val === '' || val === '-') return '--'
+      return val
     },
     getMarketColor (market) {
       const colors = {

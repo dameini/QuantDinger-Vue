@@ -30,7 +30,9 @@ const api = {
   gridRestingOrders: '/api/strategies/grid-resting-orders',
   backtest: '/api/strategies/backtest',
   backtestHistory: '/api/strategies/backtest/history',
-  backtestGet: '/api/strategies/backtest/get'
+  backtestGet: '/api/strategies/backtest/get',
+  publishTemplate: '/api/strategies/publish-template',
+  publishBotPreset: '/api/strategies/publish-bot-preset'
 }
 
 /**
@@ -402,5 +404,21 @@ export function getStrategyBacktestRun (runId) {
     url: api.backtestGet,
     method: 'get',
     params: { runId }
+  })
+}
+
+export function publishStrategyTemplate (data) {
+  return request({
+    url: api.publishTemplate,
+    method: 'post',
+    data
+  })
+}
+
+export function publishBotPreset (data) {
+  return request({
+    url: api.publishBotPreset,
+    method: 'post',
+    data
   })
 }

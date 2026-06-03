@@ -9,7 +9,7 @@ export const asyncRouterMap = [
     meta: { title: 'menu.home' },
     redirect: '/ai-asset-analysis',
     children: [
-      // 1. AI资产分析（首页）
+      // 1. AI智能分析（首页）
       // keepAlive: true so the heavy market-data fetches (sentiment / indices /
       // heatmap / calendar / opportunities / watchlist prices) only run on the
       // first visit. The component handles its own "data is stale" refresh in
@@ -21,21 +21,28 @@ export const asyncRouterMap = [
         component: () => import('@/views/ai-asset-analysis'),
         meta: { title: 'menu.dashboard.aiAssetAnalysis', keepAlive: true, icon: 'appstore', permission: ['dashboard'] }
       },
-      // 2. 指标市场（浏览/购买指标，排在图表页之上）
+      // 2. 数据中心（统一入口：指标 / 脚本 / 机器人 / 回测历史）
+      {
+        path: '/strategy-center',
+        name: 'StrategyCenter',
+        component: () => import('@/views/strategy-center'),
+        meta: { title: 'menu.dashboard.strategyCenter', keepAlive: true, icon: 'cluster', permission: ['dashboard'] }
+      },
+      // 3. 指标市场
       {
         path: '/indicator-community',
         name: 'IndicatorCommunity',
         component: () => import('@/views/indicator-community'),
         meta: { title: 'menu.dashboard.community', keepAlive: false, icon: 'shop', permission: ['dashboard'] }
       },
-      // 3. 指标 IDE（图表 + 代码编辑 + 回测一体化）
+      // 4. 指标 IDE（图表 + 代码编辑 + 回测一体化）
       {
         path: '/indicator-ide',
         name: 'IndicatorIDE',
         component: () => import('@/views/indicator-ide'),
         meta: { title: 'menu.dashboard.indicatorIde', keepAlive: true, icon: 'code', permission: ['dashboard'] }
       },
-      // 4. 策略与实盘（指标信号策略：创建 / 管理 / 与实盘联动；不含 Python 脚本策略）
+      // 5. 指标策略 — 概览已合并至数据中心
       {
         path: '/strategy-live',
         name: 'StrategyLive',
@@ -46,28 +53,23 @@ export const asyncRouterMap = [
           icon: 'deployment-unit',
           permission: ['dashboard'],
           indicatorSignalOnly: true
+        },
+        beforeEnter: (to, from, next) => {
+          if (to.query.tab === 'overview') {
+            next({ path: '/strategy-center', query: { tab: 'overview' }, replace: true })
+          } else {
+            next()
+          }
         }
       },
-      // Python 脚本策略 — kept reachable only via the "Clone as Script"
-      // button on the Trading Bot detail page and via deep links like
-      // `/strategy-script?strategy_id=...&mode=edit`. We re-hide it from
-      // the sidebar so that:
-      //   1. Casual users don't see two near-duplicate strategy entries
-      //      (Trading Bot + Script Strategies) and get confused about
-      //      which one to start with.
-      //   2. Power users can still land on this page directly when they
-      //      explicitly opt in via the clone flow on a bot they already
-      //      own. The route + view stay, only its prominence drops.
-      // If you're tempted to flip `hidden: true` back, please also re-check
-      // the discoverability promise in `views/trading-bot/index.vue`.
+      // 6. 策略工作室（Python ScriptStrategy）
       {
         path: '/strategy-script',
         name: 'StrategyScript',
         component: () => import('@/views/trading-assistant'),
-        hidden: true,
         meta: {
           title: 'menu.dashboard.scriptStrategies',
-          keepAlive: false,
+          keepAlive: true,
           icon: 'code-sandbox',
           permission: ['dashboard'],
           scriptStrategiesOnly: true
@@ -78,14 +80,14 @@ export const asyncRouterMap = [
         redirect: '/strategy-live',
         hidden: true
       },
-      // 5. 交易机器人（实盘运维监控）
+      // 7. 交易机器人
       {
         path: '/trading-bot',
         name: 'TradingBot',
         component: () => import('@/views/trading-bot'),
         meta: { title: 'menu.dashboard.tradingBot', keepAlive: true, icon: 'robot', permission: ['dashboard'] }
       },
-      // 6. 实盘券商账户（Alpaca / IBKR / MT5 统一连接 + 账户/持仓/挂单）
+      // 8. 券商账户
       {
         path: '/broker-accounts',
         name: 'BrokerAccounts',
@@ -100,7 +102,6 @@ export const asyncRouterMap = [
         hidden: true,
         meta: { title: 'menu.dashboard.indicator', keepAlive: false, icon: 'line-chart', permission: ['dashboard'] }
       },
-      // 旧路由兼容：回测中心 → 指标 IDE
       {
         path: '/backtest-center',
         name: 'BacktestCenter',
@@ -140,19 +141,19 @@ export const asyncRouterMap = [
         hidden: true,
         meta: { title: 'menu.dashboard.portfolio', keepAlive: true, icon: 'fund', permission: ['dashboard'] }
       },
-      // 个人中心
-      {
-        path: '/profile',
-        name: 'Profile',
-        component: () => import('@/views/profile'),
-        meta: { title: 'menu.myProfile', keepAlive: false, icon: 'user', permission: ['dashboard'] }
-      },
       // 会员/充值
       {
         path: '/billing',
         name: 'Billing',
         component: () => import('@/views/billing'),
         meta: { title: 'menu.billing', keepAlive: false, icon: 'wallet', permission: ['dashboard'] }
+      },
+      // 个人中心（下方分隔线后为管理员菜单）
+      {
+        path: '/profile',
+        name: 'Profile',
+        component: () => import('@/views/profile'),
+        meta: { title: 'menu.myProfile', keepAlive: false, icon: 'user', permission: ['dashboard'], menuDividerAfter: true }
       },
       // 用户管理 (admin only)
       {

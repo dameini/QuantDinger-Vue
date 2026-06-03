@@ -126,10 +126,11 @@
         :min="0.5"
         :max="30"
         :step="0.5"
+        :precision="2"
         style="width: 100%"
-        :formatter="v => `${v}%`"
-        :parser="v => v.replace('%', '')"
-        @change="emit"
+        :formatter="formatWaterfallPct"
+        :parser="parseWaterfallPct"
+        @change="onWaterfallPctChange"
       />
       <div class="field-hint">{{ $t('trading-bot.martingale.waterfallDropPctHint') }}</div>
     </a-form-model-item>
@@ -154,6 +155,13 @@
 </template>
 
 <script>
+import {
+  formatPercentDisplay,
+  parsePercentInput,
+  ratioOrPercentToUiPercent,
+  roundTo
+} from '@/utils/numberFormat'
+
 export default {
   name: 'MartingaleConfig',
   props: {
@@ -181,7 +189,7 @@ export default {
           ? this.value.trailingTpCallbackPct
           : 0.8,
         waterfallProtection: this.value.waterfallProtection !== false,
-        waterfallDropPct: this.toWaterfallPctUi(this.value.waterfallDropPct, 4)
+        waterfallDropPct: ratioOrPercentToUiPercent(this.value.waterfallDropPct, 4)
       },
       rules: {
         multiplier: [{ required: true, message: this.$t('trading-bot.martingale.multiplierReq'), trigger: 'change' }],
@@ -242,6 +250,15 @@ export default {
         if (val === 'spot' && this.form.direction !== 'long') {
           this.form.direction = 'long'
           this.emit()
+        }
+      }
+    },
+    value: {
+      deep: true,
+      handler (val) {
+        if (!val || typeof val !== 'object') return
+        if (val.waterfallDropPct != null && val.waterfallDropPct !== '') {
+          this.form.waterfallDropPct = ratioOrPercentToUiPercent(val.waterfallDropPct, 4)
         }
       }
     }
@@ -350,18 +367,25 @@ export default {
     }
   },
   methods: {
-    toWaterfallPctUi (raw, defaultPct) {
-      if (raw == null || raw === '') return defaultPct
-      const n = Number(raw)
-      if (!Number.isFinite(n)) return defaultPct
-      return n > 0 && n <= 1 ? n * 100 : n
+    formatWaterfallPct (v) {
+      return `${formatPercentDisplay(v, 2)}%`
+    },
+    parseWaterfallPct (v) {
+      const n = parsePercentInput(v, 4)
+      return n == null ? '' : n
+    },
+    onWaterfallPctChange (val) {
+      if (val != null && val !== '') {
+        this.form.waterfallDropPct = roundTo(Number(val), 4)
+      }
+      this.emit()
     },
     emit () {
       const payload = {
         ...this.form,
         initialAmount: this.firstOrderRaw,
         waterfallDropPct: this.form.waterfallProtection
-          ? Number(this.form.waterfallDropPct || 4) / 100
+          ? roundTo(Number(this.form.waterfallDropPct || 4), 4) / 100
           : undefined
       }
       this.$emit('input', payload)

@@ -55,8 +55,8 @@
           {{ formatGridProfit(record) }}
         </span>
       </template>
-      <template slot="commission" slot-scope="text">
-        {{ formatCommission(text) }}
+      <template slot="commission" slot-scope="text, record">
+        {{ formatCommission(text, record) }}
       </template>
       <template slot="time" slot-scope="text, record">
         {{ formatTime(record.created_at || text) }}
@@ -142,7 +142,7 @@ export default {
           scopedSlots: { customRender: 'value' }
         },
         {
-          title: this.$t('dashboard.indicator.backtest.profit'),
+          title: this.$t('trading-assistant.table.netProfit'),
           dataIndex: 'profit',
           key: 'profit',
           width: 96,
@@ -284,8 +284,17 @@ export default {
       }
       return formatBrowserLocalDateTime(time, { locale: loc, fallback: '--' })
     },
-    /** Net realised P&L: gross ``profit`` minus exchange-synced ``commission``. */
+    /** Net realised P&L after open + close fees (API may pre-compute net_pnl / profit). */
     netTradePnl (row) {
+      if (!row || typeof row !== 'object') return null
+      if (row.net_pnl !== null && row.net_pnl !== undefined && row.net_pnl !== '') {
+        const n = parseFloat(row.net_pnl)
+        if (!isNaN(n)) return n
+      }
+      if (row.profit_gross != null && row.profit != null) {
+        const n = parseFloat(row.profit)
+        if (!isNaN(n)) return n
+      }
       const raw = this.pickTradeProfitRaw(row)
       if (raw === null || raw === undefined || raw === '') return null
       const p = parseFloat(raw)
@@ -296,11 +305,14 @@ export default {
         const c = parseFloat(cm)
         if (!isNaN(c)) fee = c
       }
-      return p - fee
+      const openFee = parseFloat(row.open_commission_allocated || 0)
+      return p - fee - (isNaN(openFee) ? 0 : openFee)
     },
     pickTradeProfitRaw (row) {
       if (!row || typeof row !== 'object') return null
       const keys = [
+        'net_pnl',
+        'netPnl',
         'profit',
         'pnl',
         'realized_pnl',
@@ -320,6 +332,11 @@ export default {
       const code = String(reason || '').trim()
       if (!code) return null
       return `trading-assistant.tradeReason.${code}`
+    },
+    gridPurposeI18nKey (reason) {
+      const code = String(reason || '').trim()
+      if (!code) return null
+      return `trading-bot.detail.restingPurpose.${code}`
     },
     tradeDetailI18nKey (type) {
       const ty = String(type || '').toLowerCase().replace(/-/g, '_')
@@ -360,6 +377,12 @@ export default {
         if (reasonKey) {
           const rt = this.$t(reasonKey)
           if (rt !== reasonKey) return rt
+        }
+
+        const purposeKey = this.gridPurposeI18nKey(record.close_reason)
+        if (purposeKey) {
+          const pt = this.$t(purposeKey)
+          if (pt !== purposeKey) return pt
         }
 
         // Backtest-style typed exits (close_long_stop / _profit / _trailing)
@@ -505,8 +528,16 @@ export default {
       if (v < 0) return 'ta-pnl-neg'
       return 'ta-pnl-zero'
     },
-    // 格式化手续费（0 显示 $0.00，与交易所一致）
-    formatCommission (value) {
+    // 格式化手续费：平仓行优先展示开+平合计（total_commission），否则本笔 commission
+    formatCommission (value, record) {
+      const row = record && typeof record === 'object' ? record : null
+      if (row && row.total_commission != null && row.total_commission !== '') {
+        const total = parseFloat(row.total_commission)
+        if (!isNaN(total)) {
+          if (Math.abs(total) < 1e-12) return '$0.00'
+          return `$${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+        }
+      }
       if (value === null || value === undefined) return '--'
       const numValue = parseFloat(value)
       if (isNaN(numValue)) return '--'

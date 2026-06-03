@@ -8,7 +8,13 @@
 
       <span class="backtest-assumptions__title">{{ $t('dashboard.indicator.backtest.executionAssumptions.title') }}</span>
 
-      <a-tag size="small" :color="isStrictMode ? 'blue' : 'orange'">
+      <a-tag v-if="isScriptBacktest" size="small" color="purple">
+
+        {{ $t('dashboard.indicator.backtest.executionAssumptions.scriptStandardShort') }}
+
+      </a-tag>
+
+      <a-tag v-else size="small" :color="isStrictMode ? 'blue' : 'orange'">
 
         {{ isStrictMode ? $t('indicatorIde.strictModeOnShort') : $t('indicatorIde.strictModeOffShort') }}
 
@@ -106,7 +112,7 @@ export default {
 
     compact: { type: Boolean, default: false },
 
-    strictMode: { type: Boolean, default: null }
+    scriptBacktest: { type: Boolean, default: false }
 
   },
 
@@ -115,6 +121,16 @@ export default {
     ea () {
 
       return this.executionAssumptions || {}
+
+    },
+
+    isScriptBacktest () {
+
+      if (this.scriptBacktest) return true
+
+      if (this.ea.scriptBacktest === true) return true
+
+      return String(this.ea.simulationMode || '').toLowerCase() === 'script_standard'
 
     },
 
@@ -154,6 +170,12 @@ export default {
 
     simulationModeLabel () {
 
+      if (this.isScriptBacktest) {
+
+        return this.$t('dashboard.indicator.backtest.executionAssumptions.modeScriptStandard')
+
+      }
+
       if (!this.isStrictMode && (this.ea.mtfActive || this.pi.enabled)) {
 
         const exec = this.ea.executionTimeframe || this.pi.timeframe || '1m'
@@ -173,6 +195,12 @@ export default {
     },
 
     signalTimingLabel () {
+
+      if (this.isScriptBacktest) {
+
+        return this.$t('dashboard.indicator.backtest.executionAssumptions.timingScriptNextBar')
+
+      }
 
       if (this.isStrictMode) {
 
@@ -202,6 +230,12 @@ export default {
 
     bodyText () {
 
+      if (this.isScriptBacktest) {
+
+        return this.$t('dashboard.indicator.backtest.executionAssumptions.bodyScriptStandard')
+
+      }
+
       if (this.isStrictMode) {
 
         return this.$t('dashboard.indicator.backtest.executionAssumptions.bodyStrict')
@@ -223,6 +257,12 @@ export default {
     },
 
     tradeCountNote () {
+
+      if (this.isScriptBacktest) {
+
+        return this.$t('dashboard.indicator.backtest.executionAssumptions.tradeCountScriptNote')
+
+      }
 
       if (!this.isStrictMode && (this.ea.mtfActive || this.pi.enabled)) {
 
