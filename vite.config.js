@@ -11,7 +11,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 
 const gitHash = (() => {
   try {
-    return execSync('git rev-parse --short HEAD').toString().trim()
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
   } catch (e) {
     return 'unknown'
   }
@@ -96,7 +96,8 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2020',
       sourcemap: false,
-      chunkSizeWarningLimit: 1500,
+      cssMinify: false,
+      chunkSizeWarningLimit: 3600,
       commonjsOptions: {
         transformMixedEsModules: true
       },

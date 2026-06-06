@@ -750,7 +750,7 @@ export default {
   }
 }
 
-/deep/ .ant-pro-sider-menu-logo {
+.ant-pro-sider-menu-logo {
   display: flex;
   align-items: center;
   padding-left: 0 !important;
@@ -776,7 +776,7 @@ export default {
 }
 
 /* 侧栏折叠时 slogo 自适应 */
-.ant-pro-sider-menu-sider.ant-layout-sider-collapsed /deep/ .ant-pro-sider-menu-logo {
+.ant-pro-sider-menu-sider.ant-layout-sider-collapsed .ant-pro-sider-menu-logo {
   padding: 0 !important;
   justify-content: center;
 

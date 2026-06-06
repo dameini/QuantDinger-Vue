@@ -5117,7 +5117,7 @@ export default {
                 gap: 8px;
                 align-items: start;
 
-                /deep/ .ant-tag {
+                ::v-deep .ant-tag {
                   grid-column: 1 / -1;
                   justify-self: start;
                   margin: 0;
@@ -5158,7 +5158,7 @@ export default {
                 @media (max-width: 480px) {
                   grid-template-columns: 1fr;
 
-                  /deep/ .ant-tag {
+                  ::v-deep .ant-tag {
                     grid-column: 1;
                   }
                 }
@@ -5772,7 +5772,7 @@ export default {
               column-gap: 6px;
               width: 100%;
 
-              /deep/ .ant-tag {
+              ::v-deep .ant-tag {
                 margin-right: 0;
               }
 
@@ -5882,7 +5882,7 @@ export default {
               }
             }
 
-            /deep/ .ant-tag {
+            ::v-deep .ant-tag {
               margin-right: 0;
               font-size: 11px;
               line-height: 18px;

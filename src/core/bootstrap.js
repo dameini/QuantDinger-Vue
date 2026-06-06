@@ -32,8 +32,6 @@ export default function Initializer () {
   token = typeof token === 'string' ? token : null
   store.commit('SET_TOKEN', token)
 
-  store.dispatch('setLang', storage.get(APP_LANGUAGE, 'en-US'))
-
   // Fire-and-forget: pull brand / legal / contact config from backend so the
   // sidebar footer, login page, version label and legal modals reflect the
   // current deployment.  Errors are swallowed inside the action and we fall

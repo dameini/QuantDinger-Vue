@@ -4,9 +4,11 @@ import 'ant-design-vue/dist/antd.less'
 import App from './App.vue'
 import router from './router'
 import store from './store/'
-import i18n from './locales'
+import i18n, { defaultLang, loadLanguageAsync } from './locales'
 import { VueAxios } from './utils/request'
 import ProLayout, { PageHeaderWrapper } from '@ant-design-vue/pro-layout'
+import storage from 'store'
+import { APP_LANGUAGE } from '@/store/mutation-types'
 
 import bootstrap from './core/bootstrap'
 import './core/lazy_use' // use lazy load components
@@ -39,11 +41,18 @@ Vue.component('ProLayout', ProLayout)
 Vue.component('PageContainer', PageHeaderWrapper)
 Vue.component('PageHeaderWrapper', PageHeaderWrapper)
 
-new Vue({
-  router,
-  store,
-  i18n,
-  // init localstorage, vuex, Logo message
-  created: bootstrap,
-  render: h => h(App)
-}).$mount('#app')
+async function mountApp () {
+  const initialLang = storage.get(APP_LANGUAGE, defaultLang) || defaultLang
+  store.commit(APP_LANGUAGE, initialLang)
+  await loadLanguageAsync(initialLang)
+
+  new Vue({
+    router,
+    store,
+    i18n,
+    created: bootstrap,
+    render: h => h(App)
+  }).$mount('#app')
+}
+
+mountApp()

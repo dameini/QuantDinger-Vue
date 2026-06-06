@@ -3,18 +3,12 @@ import VueI18n from 'vue-i18n'
 import storage from 'store'
 import moment from 'moment'
 
-// default lang
-import enUS from './lang/en-US'
-
 Vue.use(VueI18n)
 
 export const defaultLang = 'en-US'
 
-const messages = {
-  'en-US': {
-    ...enUS
-  }
-}
+const localeLoaders = import.meta.glob('./lang/*.js')
+const messages = {}
 
 const i18n = new VueI18n({
   silentTranslationWarn: true,
@@ -23,7 +17,7 @@ const i18n = new VueI18n({
   messages
 })
 
-const loadedLanguages = [defaultLang]
+const loadedLanguages = []
 
 function setI18nLanguage (lang) {
   i18n.locale = lang
@@ -45,16 +39,23 @@ export function loadLanguageAsync (lang = defaultLang) {
   return new Promise(resolve => {
     // 缓存语言设置
     storage.set('lang', lang)
-    if (i18n.locale !== lang) {
-      if (!loadedLanguages.includes(lang)) {
-        return import(`./lang/${lang}.js`).then(msg => {
-          const locale = msg.default
-          i18n.setLocaleMessage(lang, locale)
-          loadedLanguages.push(lang)
-          moment.updateLocale(locale.momentName, locale.momentLocale)
-          return setI18nLanguage(lang)
-        })
+    if (!loadedLanguages.includes(lang)) {
+      const loader = localeLoaders[`./lang/${lang}.js`] || localeLoaders[`./lang/${defaultLang}.js`]
+      const targetLang = localeLoaders[`./lang/${lang}.js`] ? lang : defaultLang
+      if (!loader) {
+        return resolve(setI18nLanguage(defaultLang))
       }
+      return loader().then(msg => {
+        const locale = msg.default
+        i18n.setLocaleMessage(targetLang, locale)
+        if (!loadedLanguages.includes(targetLang)) {
+          loadedLanguages.push(targetLang)
+        }
+        moment.updateLocale(locale.momentName, locale.momentLocale)
+        return resolve(setI18nLanguage(targetLang))
+      })
+    }
+    if (i18n.locale !== lang) {
       return resolve(setI18nLanguage(lang))
     }
     return resolve(lang)

@@ -6546,18 +6546,18 @@ body.realdark .backtest-panel-toolbar {
 .ide-workspace-tabs.ide-workspace-tabs--pill {
   padding: 0 10px 0;
   & > {
-    /deep/ .ant-tabs-bar {
+    ::v-deep .ant-tabs-bar {
       border-bottom: 1px solid #e8e8e8;
       margin: 0 0 0;
       padding: 8px 0 0;
       background: linear-gradient(180deg, #fafbfc 0%, #f4f6f9 100%);
-      /deep/ .ant-tabs-nav-container {
+      .ant-tabs-nav-container {
         height: auto !important;
       }
-      /deep/ .ant-tabs-nav-wrap {
+      .ant-tabs-nav-wrap {
         margin-bottom: 0;
       }
-      /deep/ .ant-tabs-tab {
+      .ant-tabs-tab {
         margin: 0 4px 0 0 !important;
         padding: 7px 18px !important;
         height: auto !important;
@@ -6575,7 +6575,7 @@ body.realdark .backtest-panel-toolbar {
           background: #f8fafc !important;
         }
       }
-      /deep/ .ant-tabs-tab-active {
+      .ant-tabs-tab-active {
         color: @primary-color !important;
         background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%) !important;
         border-color: #bae0ff !important;
@@ -6583,17 +6583,17 @@ body.realdark .backtest-panel-toolbar {
         position: relative;
         z-index: 1;
       }
-      /deep/ .ant-tabs-nav .ant-tabs-tab {
+      .ant-tabs-nav .ant-tabs-tab {
         &:last-child {
           margin-right: 0 !important;
         }
       }
-      /deep/ .ant-tabs-ink-bar {
+      .ant-tabs-ink-bar {
         display: none !important;
       }
     }
   }
-  /deep/ .ant-tabs-card-content {
+  ::v-deep .ant-tabs-card-content {
     border-radius: 0 0 10px 10px;
     background: #fff;
     border: 1px solid #e8e8e8;
