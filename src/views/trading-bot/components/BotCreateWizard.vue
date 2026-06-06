@@ -154,10 +154,15 @@
           </a-form-model-item>
 
           <a-form-model-item :label="$t('trading-bot.wizard.marketType')">
-            <a-radio-group v-model="baseForm.marketType" :disabled="!swapAvailableForCurrentSelection && !spotAvailableForCurrentSelection">
+            <template v-if="shouldShowMarketTypeSelector">
+              <a-radio-group v-model="baseForm.marketType" :disabled="!swapAvailableForCurrentSelection && !spotAvailableForCurrentSelection">
               <a-radio value="swap" :disabled="!swapAvailableForCurrentSelection">{{ $t('trading-bot.wizard.futures') }}</a-radio>
               <a-radio value="spot" :disabled="!spotAvailableForCurrentSelection">{{ $t('trading-bot.wizard.spot') }}</a-radio>
-            </a-radio-group>
+              </a-radio-group>
+            </template>
+            <template v-else>
+              <a-tag color="cyan">{{ $t('trading-bot.wizard.spot') }}</a-tag>
+            </template>
             <div v-if="marketTypeHint" class="form-hint" style="margin-top: 6px; color: #8c8c8c;">
               {{ marketTypeHint }}
             </div>
@@ -669,7 +674,18 @@ export default {
     swapAvailableForCurrentSelection () {
       return this.allowedMarketTypesForCurrentSelection.has('swap')
     },
+    isStockMarketCategory () {
+      return ['usstock', 'cnstock', 'hkstock'].includes(String(this.baseForm.marketCategory || '').toLowerCase())
+    },
+    shouldShowMarketTypeSelector () {
+      return !this.isStockMarketCategory
+    },
     marketTypeHint () {
+      if (this.isStockMarketCategory) {
+        return this.isZhLocale
+          ? '股票类标的默认按现货/现金账户处理，不显示合约类型。'
+          : 'Stock instruments are treated as spot/cash products. Contract type is hidden.'
+      }
       if (!this.swapAvailableForCurrentSelection && this.spotAvailableForCurrentSelection) {
         return this.isZhLocale
           ? '当前市场/券商组合仅支持现货。'
@@ -1333,6 +1349,11 @@ export default {
       this.refilterCredentials()
       this.baseForm.symbol = ''
       this.selectedSymbolKey = undefined
+      if (this.isStockMarketCategory) {
+        this.baseForm.marketType = 'spot'
+        this.baseForm.leverage = 1
+        return
+      }
       // Force the strongest legal market_type for the new market.
       if (!this.swapAvailableForCurrentSelection) {
         this.baseForm.marketType = 'spot'
@@ -1398,15 +1419,17 @@ export default {
       const strategyCode = generateBotScript(this.botType, scriptParams, {
         timeframe: effectiveTimeframe
       })
-      const leverage = this.baseForm.marketType === 'spot' ? 1 : (this.baseForm.leverage || 5)
-      const tradeDirection = this.resolveTradeDirection(strategyParams)
+      const market = this.baseForm.marketCategory || 'Crypto'
+      const isStockMarket = ['usstock', 'cnstock', 'hkstock'].includes(String(market || '').toLowerCase())
+      const marketType = isStockMarket ? 'spot' : this.baseForm.marketType
+      const leverage = marketType === 'spot' ? 1 : (this.baseForm.leverage || 5)
+      const tradeDirection = isStockMarket ? 'long' : this.resolveTradeDirection(strategyParams)
 
       // Validate broker x market compatibility against the policy snapshot.
       // The backend will re-validate via broker_market_policy.validate_strategy_config
       // at create time, but failing fast here prevents a half-saved strategy
       // from existing and gives a more readable error.
       const exId = (this.currentExchangeId || '').toLowerCase()
-      const market = this.baseForm.marketCategory || 'Crypto'
       if (!this.eligibleExchangeIdsForMarket.has(exId)) {
         throw new Error(
           this.$t('trading-bot.wizard.cryptoCredentialRequired', { market: this.currentMarketLabel })
@@ -1432,7 +1455,7 @@ export default {
         trading_config: {
           symbol: this.baseForm.symbol,
           timeframe: effectiveTimeframe,
-          market_type: this.baseForm.marketType,
+          market_type: marketType,
           leverage: leverage,
           trade_direction: tradeDirection,
           initial_capital: this.baseForm.initialCapital,

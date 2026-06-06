@@ -2519,6 +2519,8 @@ const locale = {
   'trading-assistant.table.currentPrice': 'Current Price',
   'trading-assistant.table.unrealizedPnl': 'Unrealized P&L',
   'trading-assistant.table.pnlPercent': 'P&L %',
+  'trading-assistant.table.positionRoi': 'Position ROI',
+  'trading-assistant.table.capitalContribution': 'Capital P&L %',
   'trading-assistant.table.buy': 'Buy',
   'trading-assistant.records.syncHtx': 'Sync HTX Records',
   'trading-assistant.records.syncHtxSuccess': 'HTX sync complete: fetched {fetched}, inserted {inserted}, updated {updated}, unassigned {unassigned}, skipped {skipped}',
@@ -2540,6 +2542,10 @@ const locale = {
   'trading-assistant.positions.dataSourceStrategy': 'Strategy ledger L3',
   'trading-assistant.positions.dataSourceAccount': 'Account mirror L1',
   'trading-assistant.positions.noAccountPositions': 'No open positions on this credential',
+  'trading-assistant.positions.reconciliation.accountOnly': 'The exchange account has a real position on this symbol, but this strategy ledger has no position. The table only shows positions created by this strategy.',
+  'trading-assistant.positions.reconciliation.strategyOnly': 'This strategy ledger has a position, but account sync has not found the matching exchange position yet. Check for manual close or exchange sync delay.',
+  'trading-assistant.positions.reconciliation.mismatch': 'The exchange account position differs from this strategy ledger. The table only shows this strategy ledger position; check for another same-symbol strategy or manual trade.',
+  'trading-assistant.positions.reconciliation.error': 'Account position reconciliation failed. The table still only shows this strategy ledger position.',
   'trading-assistant.positions.syncedAt': 'Synced at',
   'trading-assistant.positions.sharedCredentialHint': 'This strategy may share the same API key with Quick Trade or other bots. Account mirror shows all legs on the credential, not only this strategy.',
   'trading-assistant.positions.viewAccountPositions': 'View account',
@@ -4030,6 +4036,7 @@ const locale = {
   'community.already_latest': 'Your local copy is already up to date',
   'community.local_copy_not_found': 'Could not find your local copy — it may have been deleted. Please purchase it again.',
   'community.indicator_unpublished': 'This indicator has been unpublished',
+  'community.indicator_unavailable': 'This content is not approved or is unavailable',
 
   // Admin Review
   'community.admin.reviewTab': 'Review',

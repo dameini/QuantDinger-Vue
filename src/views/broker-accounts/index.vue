@@ -200,7 +200,7 @@ export default {
       try {
         await broker[id].disconnect()
         this.$message.success(this.$t('brokerAccounts.disconnectSuccess'))
-        await this.loadOne(id)
+        this.$set(this.connectionMap, id, { connected: false })
       } catch (e) {
         this.$message.error((e && (e.error || e.message)) || this.$t('brokerAccounts.disconnectFailed'))
       } finally {

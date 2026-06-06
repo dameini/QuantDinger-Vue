@@ -2459,6 +2459,8 @@ const locale = {
   'trading-assistant.table.currentPrice': '当前价格',
   'trading-assistant.table.unrealizedPnl': '未实现盈亏',
   'trading-assistant.table.pnlPercent': '盈亏比例',
+  'trading-assistant.table.positionRoi': '仓位收益率',
+  'trading-assistant.table.capitalContribution': '本金贡献率',
   'trading-assistant.table.notional': '持仓价值 (USDT)',
   'trading-assistant.table.buy': '买入',
   'trading-assistant.records.syncHtx': '同步火币记录',
@@ -2481,6 +2483,10 @@ const locale = {
   'trading-assistant.positions.dataSourceStrategy': '策略账本 L3',
   'trading-assistant.positions.dataSourceAccount': '账户镜像 L1',
   'trading-assistant.positions.noAccountPositions': '该凭证在交易所暂无持仓',
+  'trading-assistant.positions.reconciliation.accountOnly': '账户中存在同标的真实持仓，但当前策略账本无持仓。当前表格只显示本策略成交形成的持仓。',
+  'trading-assistant.positions.reconciliation.strategyOnly': '当前策略账本有持仓，但账户同步暂未看到对应真实仓位，请确认是否已手动平仓或交易所同步延迟。',
+  'trading-assistant.positions.reconciliation.mismatch': '账户真实持仓与当前策略账本数量不一致。当前表格只显示本策略账本持仓，建议检查是否有同标的其他策略或手动交易。',
+  'trading-assistant.positions.reconciliation.error': '账户持仓对账失败，当前表格仍只显示本策略账本持仓。',
   'trading-assistant.positions.syncedAt': '同步时间',
   'trading-assistant.positions.sharedCredentialHint': '本策略与其他功能可能共用同一 API Key；下方账户镜像为凭证下全部持仓，不一定全部来自本策略。',
   'trading-assistant.positions.viewAccountPositions': '查看账户',
@@ -4026,6 +4032,7 @@ const locale = {
   'community.already_latest': '已经是最新版本，无需同步',
   'community.local_copy_not_found': '未找到你的本地副本，可能已被删除，请重新购买',
   'community.indicator_unpublished': '该指标已下架，无法同步',
+  'community.indicator_unavailable': '该内容未通过审核或暂不可用，无法同步',
 
   // 管理员审核功能
   'community.admin.reviewTab': '审核管理',

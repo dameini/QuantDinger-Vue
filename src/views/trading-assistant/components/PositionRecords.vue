@@ -42,7 +42,7 @@
         :pagination="false"
         size="small"
         rowKey="id"
-        :scroll="{ x: 860 }"
+        :scroll="{ x: 960 }"
       >
         <template slot="symbol" slot-scope="text, record">
           <strong>{{ record.symbol || text }}</strong>
@@ -73,9 +73,14 @@
             ${{ parseFloat(record.unrealized_pnl || text || 0).toFixed(2) }}
           </span>
         </template>
-        <template slot="pnlPercent" slot-scope="text, record">
-          <span :class="{ 'profit': parseFloat(record.pnl_percent || text || 0) > 0, 'loss': parseFloat(record.pnl_percent || text || 0) < 0 }">
-            {{ parseFloat(record.pnl_percent || text || 0).toFixed(2) }}%
+        <template slot="positionRoi" slot-scope="text, record">
+          <span :class="pnlClass(record.position_margin_pnl_percent || text)">
+            {{ formatPercent(record.position_margin_pnl_percent || text) }}
+          </span>
+        </template>
+        <template slot="capitalContribution" slot-scope="text, record">
+          <span :class="pnlClass(record.strategy_capital_pnl_percent || text)">
+            {{ formatPercent(record.strategy_capital_pnl_percent || text) }}
           </span>
         </template>
         <template slot="source" slot-scope="text, record">
@@ -286,13 +291,14 @@ export default {
             const entryPrice = parseFloat(position.entry_price || position.entryPrice || 0)
             const size = parseFloat(position.size || '0') || 0
             const pnl = parseFloat(position.unrealized_pnl || position.unrealizedPnl || '0') || 0
-            let pnlPercent = parseFloat(position.pnl_percent || position.pnlPercent || '0') || 0
-
-            if (entryPrice > 0 && size > 0) {
-              pnlPercent = (pnl / (entryPrice * size)) * 100 * lev
-            } else if (mt !== 'spot') {
-              pnlPercent = pnlPercent * lev
+            const notional = parseFloat(position.notional_value || position.notionalValue || 0) || (entryPrice > 0 && size > 0 ? entryPrice * size : 0)
+            const legacyPct = this.safeNumber(position.pnl_percent ?? position.pnlPercent)
+            let marginPct = this.safeNumber(position.position_margin_pnl_percent ?? position.positionMarginPnlPercent)
+            if (!Number.isFinite(marginPct)) {
+              marginPct = Number.isFinite(legacyPct) ? legacyPct : (notional > 0 ? (pnl / notional) * 100 * lev : 0)
             }
+            let capitalPct = this.safeNumber(position.strategy_capital_pnl_percent ?? position.capital_contribution_percent ?? position.strategyCapitalPnlPercent)
+            if (!Number.isFinite(capitalPct)) capitalPct = 0
 
             return {
               id: position.id || `${position.source || 'local'}-${index}`,
@@ -302,7 +308,11 @@ export default {
               entry_price: entryPrice > 0 ? entryPrice.toString() : '0',
               current_price: position.current_price || position.currentPrice || '0',
               unrealized_pnl: position.unrealized_pnl || position.unrealizedPnl || '0',
-              pnl_percent: pnlPercent,
+              pnl_percent: marginPct,
+              position_margin_pnl_percent: marginPct,
+              position_notional_pnl_percent: this.safeNumber(position.position_notional_pnl_percent ?? position.positionNotionalPnlPercent) || 0,
+              strategy_capital_pnl_percent: capitalPct,
+              notional_value: notional,
               updated_at: position.updated_at || position.updatedAt || '',
               source: position.source || 'local',
               attribution_status: position.attribution_status || 'strategy'
@@ -345,7 +355,25 @@ export default {
       const value = parseFloat(price)
       return Number.isFinite(value) && value > 0
     },
+    safeNumber (value) {
+      if (value === null || value === undefined || value === '') return NaN
+      const parsed = parseFloat(value)
+      return Number.isFinite(parsed) ? parsed : NaN
+    },
+    formatPercent (value) {
+      const parsed = this.safeNumber(value)
+      return `${(Number.isFinite(parsed) ? parsed : 0).toFixed(2)}%`
+    },
+    pnlClass (value) {
+      const parsed = this.safeNumber(value)
+      return {
+        profit: Number.isFinite(parsed) && parsed > 0,
+        loss: Number.isFinite(parsed) && parsed < 0
+      }
+    },
     getNotional (record) {
+      const supplied = parseFloat(record.notional_value || 0)
+      if (Number.isFinite(supplied) && supplied > 0) return supplied
       const size = parseFloat(record.size || 0)
       const cp = parseFloat(record.current_price || 0)
       if (size > 0 && cp > 0) return size * cp

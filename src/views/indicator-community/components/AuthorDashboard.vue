@@ -92,6 +92,7 @@
           <template slot="nameCol" slot-scope="text, record">
             <div class="ad-name-col">
               <a class="ad-name" @click="viewSales(record)">{{ record.name }}</a>
+              <a-tag class="ad-asset-tag" color="blue">{{ getAssetTypeText(record.asset_type) }}</a-tag>
               <div class="ad-desc">{{ record.description }}</div>
             </div>
           </template>
@@ -107,6 +108,10 @@
               {{ $t('community.statusRejected') }}
             </a-tag>
             <a-tag v-else color="default">—</a-tag>
+            <div v-if="record.review_note" class="ad-review-note">
+              <a-icon type="message" />
+              {{ record.review_note }}
+            </div>
           </template>
 
           <template slot="price" slot-scope="text, record">
@@ -204,7 +209,7 @@ export default {
     publishedColumns () {
       return [
         { title: this.$t('authorDashboard.col.name'), dataIndex: 'name', key: 'name', scopedSlots: { customRender: 'nameCol' } },
-        { title: this.$t('authorDashboard.col.status'), dataIndex: 'review_status', key: 'review_status', width: 100, scopedSlots: { customRender: 'status' } },
+        { title: this.$t('authorDashboard.col.status'), dataIndex: 'review_status', key: 'review_status', width: 180, scopedSlots: { customRender: 'status' } },
         { title: this.$t('authorDashboard.col.price'), dataIndex: 'price', key: 'price', width: 130, scopedSlots: { customRender: 'price' } },
         { title: this.$t('authorDashboard.col.sales'), dataIndex: 'purchase_count', key: 'purchase_count', width: 80, align: 'right', sorter: (a, b) => a.purchase_count - b.purchase_count },
         { title: this.$t('authorDashboard.col.revenue'), dataIndex: 'revenue', key: 'revenue', width: 110, align: 'right', scopedSlots: { customRender: 'revenue' }, sorter: (a, b) => a.revenue - b.revenue },
@@ -348,6 +353,12 @@ export default {
       } catch (e) {
         return iso
       }
+    },
+    getAssetTypeText (assetType) {
+      const type = assetType || 'indicator'
+      if (type === 'script_template') return this.$t('community.tabScriptTemplates')
+      if (type === 'bot_preset') return this.$t('community.tabBotPresets')
+      return this.$t('community.tabIndicators')
     }
   }
 }
@@ -444,6 +455,22 @@ export default {
   font-weight: 500;
   color: #1890ff;
   cursor: pointer;
+}
+
+.ad-asset-tag {
+  margin-left: 6px;
+}
+
+.ad-review-note {
+  margin-top: 6px;
+  color: #cf1322;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+
+  .anticon {
+    margin-right: 4px;
+  }
 }
 
 .ad-desc {

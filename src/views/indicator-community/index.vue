@@ -148,6 +148,7 @@
               <div class="review-item-header">
                 <div class="item-info">
                   <span class="item-name">{{ item.name }}</span>
+                  <a-tag color="blue">{{ getAssetTypeText(item.asset_type) }}</a-tag>
                   <a-tag v-if="item.pricing_type === 'free'" color="green">{{ $t('community.free') }}</a-tag>
                   <a-tag v-else color="orange">{{ item.price }} {{ $t('community.credits') }}</a-tag>
                   <a-tag :color="getStatusColor(item.review_status)">{{ getStatusText(item.review_status) }}</a-tag>
@@ -640,6 +641,13 @@ export default {
         rejected: this.$t('community.admin.rejected')
       }
       return texts[status] || status
+    },
+
+    getAssetTypeText (assetType) {
+      const type = assetType || 'indicator'
+      if (type === 'script_template') return this.$t('community.tabScriptTemplates')
+      if (type === 'bot_preset') return this.$t('community.tabBotPresets')
+      return this.$t('community.tabIndicators')
     },
 
     handleReview (indicator, action) {

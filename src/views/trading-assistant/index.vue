@@ -954,7 +954,7 @@
                               style="width: 100%" />
                           </a-form-item>
                         </a-col>
-                        <a-col :xs="24" :sm="24" :md="12" :lg="12">
+                        <a-col v-if="shouldShowMarketTypeSelector" :xs="24" :sm="24" :md="12" :lg="12">
                           <a-form-item :label="$t('trading-assistant.form.marketType')">
                             <a-radio-group
                               v-decorator="['market_type', { initialValue: 'swap' }]"
@@ -973,6 +973,14 @@
                             </div>
                           </a-form-item>
                         </a-col>
+                        <a-col v-else :xs="24" :sm="24" :md="12" :lg="12">
+                          <a-form-item :label="$t('trading-assistant.form.marketType')">
+                            <a-tag color="cyan">{{ $t('trading-assistant.form.marketTypeSpot') }}</a-tag>
+                            <div class="form-item-hint">
+                              {{ $t('trading-assistant.form.stockSpotOnlyHint') || 'Stocks are traded as spot/cash products. Futures/contract market type is hidden.' }}
+                            </div>
+                          </a-form-item>
+                        </a-col>
                       </a-row>
 
                       <a-row :gutter="16">
@@ -981,12 +989,12 @@
                             <a-input-number
                               v-decorator="['leverage', { initialValue: 5, rules: [{ required: true, message: $t('trading-assistant.validation.leverageRequired') }] }]"
                               :min="1"
-                              :max="form.getFieldValue('market_type') === 'spot' ? 1 : 125"
+                              :max="isSpotLikeMarket ? 1 : 125"
                               :step="1"
                               style="width: 100%"
-                              :disabled="form.getFieldValue('market_type') === 'spot'" />
+                              :disabled="isSpotLikeMarket" />
                             <div class="form-item-hint">
-                              <span v-if="form.getFieldValue('market_type') === 'spot'">
+                              <span v-if="isSpotLikeMarket">
                                 {{ $t('trading-assistant.form.spotLeverageFixed') }}
                               </span>
                               <span v-else>
@@ -999,17 +1007,17 @@
                           <a-form-item :label="$t('trading-assistant.form.tradeDirection')">
                             <a-radio-group
                               v-decorator="['trade_direction', { initialValue: 'long' }]"
-                              :disabled="form.getFieldValue('market_type') === 'spot' || isLongOnlyBroker">
+                              :disabled="isSpotLikeMarket || isLongOnlyBroker">
                               <a-radio value="long">{{ $t('trading-assistant.form.tradeDirectionLong') }}</a-radio>
-                              <a-radio value="short" :disabled="form.getFieldValue('market_type') === 'spot' || isLongOnlyBroker">
+                              <a-radio value="short" :disabled="isSpotLikeMarket || isLongOnlyBroker">
                                 {{ $t('trading-assistant.form.tradeDirectionShort') }}
                               </a-radio>
-                              <a-radio value="both" :disabled="form.getFieldValue('market_type') === 'spot' || isLongOnlyBroker">
+                              <a-radio value="both" :disabled="isSpotLikeMarket || isLongOnlyBroker">
                                 {{ $t('trading-assistant.form.tradeDirectionBoth') }}
                               </a-radio>
                             </a-radio-group>
                             <div
-                              v-if="form.getFieldValue('market_type') === 'spot'"
+                              v-if="isSpotLikeMarket"
                               class="form-item-hint"
                               style="color: #ff9800;">
                               {{ $t('trading-assistant.form.spotOnlyLongHint') }}
@@ -1144,7 +1152,7 @@
                     </a-row>
 
                     <a-row :gutter="16">
-                      <a-col :xs="24" :sm="12">
+                      <a-col v-if="shouldShowMarketTypeSelector" :xs="24" :sm="12">
                         <a-form-item :label="$t('trading-assistant.form.marketType')">
                           <a-radio-group v-decorator="['market_type', { initialValue: 'swap' }]">
                             <a-radio value="swap" :disabled="isAlpacaCryptoSpotOnly">{{ $t('trading-assistant.form.marketTypeFutures') }}</a-radio>
@@ -1158,14 +1166,23 @@
                           </div>
                         </a-form-item>
                       </a-col>
+                      <a-col v-else :xs="24" :sm="12">
+                        <a-form-item :label="$t('trading-assistant.form.marketType')">
+                          <a-tag color="cyan">{{ $t('trading-assistant.form.marketTypeSpot') }}</a-tag>
+                          <div class="form-item-hint">
+                            {{ $t('trading-assistant.form.stockSpotOnlyHint') || 'Stocks are traded as spot/cash products. Futures/contract market type is hidden.' }}
+                          </div>
+                        </a-form-item>
+                      </a-col>
                       <a-col :xs="24" :sm="12">
                         <a-form-item :label="`${$t('trading-assistant.form.leverage')} (x)`">
                           <a-input-number
                             v-decorator="['leverage', { initialValue: 5 }]"
                             :min="1"
-                            :max="125"
+                            :max="isSpotLikeMarket ? 1 : 125"
                             :step="1"
                             style="width: 100%"
+                            :disabled="isSpotLikeMarket"
                           />
                         </a-form-item>
                       </a-col>
@@ -1174,11 +1191,11 @@
                     <a-form-item :label="$t('trading-assistant.form.tradeDirection')">
                       <a-select
                         v-decorator="['trade_direction', { initialValue: 'both' }]"
-                        :disabled="isLongOnlyBroker"
+                        :disabled="isSpotLikeMarket || isLongOnlyBroker"
                         :getPopupContainer="(triggerNode) => triggerNode.parentNode">
                         <a-select-option value="long">{{ $t('trading-assistant.form.tradeDirectionLong') }}</a-select-option>
-                        <a-select-option value="short" :disabled="isLongOnlyBroker">{{ $t('trading-assistant.form.tradeDirectionShort') }}</a-select-option>
-                        <a-select-option value="both" :disabled="isLongOnlyBroker">{{ $t('trading-assistant.form.tradeDirectionBoth') }}</a-select-option>
+                        <a-select-option value="short" :disabled="isSpotLikeMarket || isLongOnlyBroker">{{ $t('trading-assistant.form.tradeDirectionShort') }}</a-select-option>
+                        <a-select-option value="both" :disabled="isSpotLikeMarket || isLongOnlyBroker">{{ $t('trading-assistant.form.tradeDirectionBoth') }}</a-select-option>
                       </a-select>
                       <div
                         v-if="isLongOnlyBroker"
@@ -1776,6 +1793,23 @@ export default {
       // Always depend on selectedMarketCategory to make UI reactive.
       const cat = this.selectedMarketCategory || 'Crypto'
       return String(cat).toLowerCase() === 'crypto'
+    },
+    isStockMarketCategory () {
+      const cat = String(this.selectedMarketCategory || '').toLowerCase()
+      return ['usstock', 'cnstock', 'hkstock'].includes(cat)
+    },
+    shouldShowMarketTypeSelector () {
+      return !this.isStockMarketCategory
+    },
+    isSpotLikeMarket () {
+      if (this.isStockMarketCategory || this.isAlpacaCryptoSpotOnly) {
+        return true
+      }
+      try {
+        return this.form && this.form.getFieldValue && this.form.getFieldValue('market_type') === 'spot'
+      } catch (e) {
+        return false
+      }
     },
     // Check if selected market supports live trading (Crypto, USStock with IBKR, or Forex with MT5)
     canUseLiveTrading () {
@@ -2561,6 +2595,7 @@ export default {
           const idx = firstVal.indexOf(':')
           const market = firstVal.slice(0, idx)
           this.selectedMarketCategory = market || 'Crypto'
+          this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
         }
       }
     },
@@ -2572,6 +2607,68 @@ export default {
         Futures: 'cyan'
       }
       return colors[market] || 'default'
+    },
+    safeSetFormFields (values) {
+      if (!this.form || !this.form.setFieldsValue || !values || typeof values !== 'object') {
+        return
+      }
+      const nextValues = {}
+      Object.keys(values).forEach(key => {
+        try {
+          if (!this.form.getFieldInstance || this.form.getFieldInstance(key)) {
+            nextValues[key] = values[key]
+          }
+        } catch (e) { }
+      })
+      if (Object.keys(nextValues).length > 0) {
+        this.form.setFieldsValue(nextValues)
+      }
+    },
+    applyMarketDefaultsForCategory (marketCategory) {
+      const cat = String(marketCategory || this.selectedMarketCategory || '').toLowerCase()
+      const isStock = ['usstock', 'cnstock', 'hkstock'].includes(cat)
+      if (!isStock) {
+        return
+      }
+      const patch = {
+        leverage: 1,
+        trade_direction: 'long'
+      }
+      if (this.shouldShowMarketTypeSelector) {
+        patch.market_type = 'spot'
+      }
+      this.safeSetFormFields(patch)
+    },
+    normalizeMarketExecutionFields (marketCategory, values) {
+      const cat = String(marketCategory || '').toLowerCase()
+      const isStock = ['usstock', 'cnstock', 'hkstock'].includes(cat)
+      let marketType = ((values && values.market_type) === 'futures'
+        ? 'swap'
+        : ((values && values.market_type) || 'swap'))
+      let leverage = values && values.leverage != null ? values.leverage : 5
+      let tradeDirection = (values && values.trade_direction) || (isStock ? 'long' : 'both')
+
+      if (isStock) {
+        return {
+          marketType: 'spot',
+          leverage: 1,
+          tradeDirection: 'long'
+        }
+      }
+      if (this.isAlpacaCryptoSpotOnly && marketType !== 'spot') {
+        marketType = 'spot'
+      }
+      if (marketType === 'spot') {
+        leverage = 1
+        tradeDirection = 'long'
+      } else {
+        if (leverage < 1) leverage = 1
+        if (leverage > 125) leverage = 125
+      }
+      if (this.isLongOnlyBroker) {
+        tradeDirection = 'long'
+      }
+      return { marketType, leverage, tradeDirection }
     },
     handleWatchlistSymbolChange (val) {
       // 检查是否点击了"添加"选项
@@ -2594,6 +2691,7 @@ export default {
       const market = val.slice(0, idx)
       // Keep selection reactive for Step 3 execution gating
       this.selectedMarketCategory = market || 'Crypto'
+      this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
 
       // Auto-set broker ID based on market category
       if (this.selectedMarketCategory === 'Forex') {
@@ -2644,6 +2742,7 @@ export default {
           const idx = firstVal.indexOf(':')
           const market = firstVal.slice(0, idx)
           this.selectedMarketCategory = market || 'Crypto'
+          this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
         }
       }
 
@@ -2836,7 +2935,7 @@ export default {
           try {
             const current = this.form && this.form.getFieldValue && this.form.getFieldValue('trade_direction')
             if (current && String(current).toLowerCase() !== 'long') {
-              this.form && this.form.setFieldsValue && this.form.setFieldsValue({ trade_direction: 'long' })
+              this.safeSetFormFields({ trade_direction: 'long' })
               this.$message.info(
                 this.$t('trading-assistant.form.longOnlyBrokerHint') ||
                 'IBKR / Alpaca currently support long-only trading. Direction locked to Long.'
@@ -2852,7 +2951,7 @@ export default {
           try {
             const currentMt = this.form && this.form.getFieldValue && this.form.getFieldValue('market_type')
             if (currentMt && String(currentMt).toLowerCase() !== 'spot') {
-              this.form && this.form.setFieldsValue && this.form.setFieldsValue({ market_type: 'spot', leverage: 1 })
+              this.safeSetFormFields({ market_type: 'spot', leverage: 1 })
               this.$message.info(
                 this.$t('trading-assistant.form.alpacaCryptoSpotOnlyHint') ||
                 'Alpaca crypto desk is spot-only (no perpetual swaps). Market type locked to Spot.'
@@ -3033,27 +3132,27 @@ export default {
       this.scriptTemplateKeyForPayload = isScriptCreate ? (this.pendingScriptTemplateKey || '') : ''
 
       this.form.resetFields()
-      this.form.setFieldsValue({
-        strategy_name: defaultStrategyName,
-        execution_mode: 'signal',
-        notify_channels: ['browser'],
-        save_credential: false,
-        live_disclaimer_ack: false,
-        initial_capital: 1000,
-        market_type: 'swap',
-        leverage: 5,
-        trade_direction: 'long',
-        timeframe: '15m',
-        cs_strategy_type: 'single',
-        portfolio_size: 5,
-        long_ratio: 1,
-        rebalance_frequency: 'daily'
-      })
       this.csStrategyTypeUi = 'single'
       this.liveDisclaimerAckUi = false
       this.showFormModal = true
 
       this.$nextTick(async () => {
+        this.safeSetFormFields({
+          strategy_name: defaultStrategyName,
+          execution_mode: 'signal',
+          notify_channels: ['browser'],
+          save_credential: false,
+          live_disclaimer_ack: false,
+          initial_capital: 1000,
+          market_type: 'swap',
+          leverage: 5,
+          trade_direction: 'long',
+          timeframe: '15m',
+          cs_strategy_type: 'single',
+          portfolio_size: 5,
+          long_ratio: 1,
+          rebalance_frequency: 'daily'
+        })
         await this.loadWatchlist()
         await this.loadIndicators()
         this.applyPendingRouteIndicatorSelection()
@@ -3112,6 +3211,7 @@ export default {
 
       // Market / execution / notification defaults (backward compatible)
       this.selectedMarketCategory = strategy.market_category || 'Crypto'
+      this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
       const executionMode = strategy.execution_mode || 'signal'
       this.executionModeUi = executionMode
       // Editing an existing live strategy: default as acknowledged to avoid blocking edits
@@ -3164,13 +3264,15 @@ export default {
         this.pendingScriptTemplateKey = sk
         this.lastAutoScriptStrategyName = strategy.strategy_name || ''
         this.lastAutoStrategyName = strategy.strategy_name || ''
-        const mt = (tc.market_type === 'futures' ? 'swap' : (tc.market_type || 'swap'))
+        const mt = this.isStockMarketCategory
+          ? 'spot'
+          : (tc.market_type === 'futures' ? 'swap' : (tc.market_type || 'swap'))
         this.form.setFieldsValue({
           strategy_name: strategy.strategy_name,
           symbol: symbolValue,
           initial_capital: tc.initial_capital != null ? tc.initial_capital : (strategy.initial_capital || 1000),
-          leverage: tc.leverage != null ? tc.leverage : (strategy.leverage || 5),
-          trade_direction: tc.trade_direction || 'long',
+          leverage: this.isStockMarketCategory ? 1 : (tc.leverage != null ? tc.leverage : (strategy.leverage || 5)),
+          trade_direction: this.isStockMarketCategory ? 'long' : (tc.trade_direction || 'long'),
           timeframe: tc.timeframe || strategy.timeframe || '15m',
           market_type: mt
         })
@@ -3279,10 +3381,10 @@ export default {
           strategy_name: strategy.strategy_name,
           symbol: symbolValue,
           initial_capital: tc.initial_capital,
-          leverage: tc.leverage,
-          trade_direction: tc.trade_direction || 'long',
+          leverage: this.isStockMarketCategory ? 1 : tc.leverage,
+          trade_direction: this.isStockMarketCategory ? 'long' : (tc.trade_direction || 'long'),
           timeframe: tc.timeframe || '1H',
-          market_type: (tc.market_type === 'futures' ? 'swap' : (tc.market_type || 'swap')),
+          market_type: this.isStockMarketCategory ? 'spot' : (tc.market_type === 'futures' ? 'swap' : (tc.market_type || 'swap')),
           enable_ai_filter: aiFilterEnabled,
           strict_mode: tc.strict_mode !== false,
           cs_strategy_type: csType,
@@ -3294,6 +3396,7 @@ export default {
           const first = this.crossSectionalSymbols[0]
           if (typeof first === 'string' && first.includes(':')) {
             this.selectedMarketCategory = first.split(':', 1)[0] || this.selectedMarketCategory
+            this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
           }
         }
       }
@@ -4177,7 +4280,12 @@ export default {
       // ===== Signal mode (original logic) =====
       if (this.currentStep === 0) {
         const fieldsToValidate = ['indicator_id', 'strategy_name']
-        fieldsToValidate.push('initial_capital', 'market_type', 'leverage', 'trade_direction', 'timeframe')
+        fieldsToValidate.push('initial_capital', 'leverage', 'trade_direction', 'timeframe')
+        if (this.shouldShowMarketTypeSelector) {
+          fieldsToValidate.push('market_type')
+        } else {
+          this.applyMarketDefaultsForCategory(this.selectedMarketCategory)
+        }
 
         const csTypePreview = this.csStrategyTypeUi || 'single'
         if (this.isEditMode && csTypePreview !== 'cross_sectional') {
@@ -4204,8 +4312,8 @@ export default {
 
           try {
             const marketType = (values && values.market_type) || this.form.getFieldValue('market_type')
-            if (marketType === 'spot') {
-              this.form.setFieldsValue({ leverage: 1, trade_direction: 'long' })
+            if (marketType === 'spot' || this.isSpotLikeMarket) {
+              this.safeSetFormFields({ leverage: 1, trade_direction: 'long' })
             }
           } catch (e) { }
 
@@ -4272,22 +4380,16 @@ export default {
                 }
               }
 
-              let marketType = (values.market_type === 'futures' ? 'swap' : (values.market_type || 'swap'))
-              let leverage = values.leverage != null ? values.leverage : 5
-              let tradeDirection = values.trade_direction || 'both'
-              if (this.isAlpacaCryptoSpotOnly && marketType !== 'spot') {
+              const rawMarketType = (values.market_type === 'futures' ? 'swap' : (values.market_type || 'swap'))
+              const normalizedExec = this.normalizeMarketExecutionFields(marketCategory, values)
+              let marketType = normalizedExec.marketType
+              let leverage = normalizedExec.leverage
+              let tradeDirection = normalizedExec.tradeDirection
+              if (this.isAlpacaCryptoSpotOnly && rawMarketType !== 'spot') {
                 this.$message.warning(
                   this.$t('trading-assistant.form.alpacaCryptoSpotOnlyHint') ||
                   'Alpaca crypto desk is spot-only. Market type forced to Spot.'
                 )
-                marketType = 'spot'
-              }
-              if (marketType === 'spot') {
-                leverage = 1
-                tradeDirection = 'long'
-              } else {
-                if (leverage < 1) leverage = 1
-                if (leverage > 125) leverage = 125
               }
               if (this.isLongOnlyBroker && tradeDirection !== 'long') {
                 this.$message.warning(
@@ -4395,29 +4497,25 @@ export default {
             // AI filter values: source of truth is the reactive UI state to avoid rc-form edge cases.
             const enableAiFilter = !!this.aiFilterEnabledUi
 
-            let marketType = (values.market_type === 'futures' ? 'swap' : (values.market_type || 'swap'))
-            let leverage = values.leverage || 1
-            let tradeDirection = values.trade_direction || 'long'
+            const rawMarketType = (values.market_type === 'futures' ? 'swap' : (values.market_type || 'swap'))
+            const normalizedExec = this.normalizeMarketExecutionFields(this.selectedMarketCategory || 'Crypto', values)
+            let marketType = normalizedExec.marketType
+            let leverage = normalizedExec.leverage
+            let tradeDirection = normalizedExec.tradeDirection
 
             // Hard guard: Alpaca crypto desk is spot-only.  Even if the user
             // bypasses the disabled radio (devtools, stale form state), the
             // worker would reject swap orders at runtime — coerce here so
             // the saved strategy matches what will actually execute.
-            if (this.isAlpacaCryptoSpotOnly && marketType !== 'spot') {
+            if (this.isAlpacaCryptoSpotOnly && rawMarketType !== 'spot') {
               this.$message.warning(
                 this.$t('trading-assistant.form.alpacaCryptoSpotOnlyHint') ||
                 'Alpaca crypto desk is spot-only. Market type forced to Spot.'
               )
-              marketType = 'spot'
             }
 
             if (marketType === 'spot') {
-              leverage = 1
-              tradeDirection = 'long'
               this.$message.info(this.$t('trading-assistant.messages.spotLimitations'))
-            } else {
-              if (leverage < 1) leverage = 1
-              if (leverage > 125) leverage = 125
             }
 
             // Hard guard: long-only brokers (IBKR / Alpaca). Even if the user
