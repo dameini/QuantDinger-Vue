@@ -1238,22 +1238,68 @@
                             </div>
                           </div>
                         </div>
-                        <div v-if="experimentHasAnalytics" class="experiment-analytics">
-                          <div class="experiment-analytics-card">
-                            <div class="experiment-analytics-head">
-                              <a-icon type="dot-chart" />
-                              <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsRiskReturn') }}</span>
-                              <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsRiskReturnHint') }}</span>
+                        <div v-if="experimentHasAnalytics" class="experiment-lab">
+                          <div class="experiment-lab-head">
+                            <div>
+                              <div class="experiment-section-title">
+                                <a-icon type="fund" style="margin-right: 6px;" />
+                                {{ $t('indicatorIde.optimizationLab') }}
+                              </div>
+                              <div class="experiment-lab-subtitle">{{ $t('indicatorIde.optimizationLabHint') }}</div>
                             </div>
-                            <div ref="experimentScatterChart" class="experiment-analytics-chart"></div>
+                            <a-tag color="blue">{{ $t('indicatorIde.analyticsDataSource') }}</a-tag>
                           </div>
-                          <div class="experiment-analytics-card">
-                            <div class="experiment-analytics-head">
-                              <a-icon type="radar-chart" />
-                              <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsRadar') }}</span>
-                              <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsRadarHint') }}</span>
+                          <div class="experiment-audit-grid">
+                            <div v-for="card in experimentDataAuditCards" :key="card.key" class="experiment-audit-card">
+                              <a-icon :type="card.icon" />
+                              <div>
+                                <span>{{ card.label }}</span>
+                                <strong>{{ card.value }}</strong>
+                                <small>{{ card.hint }}</small>
+                              </div>
                             </div>
-                            <div ref="experimentRadarChart" class="experiment-analytics-chart"></div>
+                          </div>
+                          <div class="experiment-analytics experiment-analytics--lab">
+                            <div class="experiment-analytics-card experiment-analytics-card--wide">
+                              <div class="experiment-analytics-head">
+                                <a-icon type="line-chart" />
+                                <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsConvergence') }}</span>
+                                <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsConvergenceHint') }}</span>
+                              </div>
+                              <div ref="experimentConvergenceChart" class="experiment-analytics-chart"></div>
+                            </div>
+                            <div class="experiment-analytics-card">
+                              <div class="experiment-analytics-head">
+                                <a-icon type="cluster" />
+                                <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsOosMatrix') }}</span>
+                                <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsOosMatrixHint') }}</span>
+                              </div>
+                              <div ref="experimentOosMatrixChart" class="experiment-analytics-chart"></div>
+                            </div>
+                            <div class="experiment-analytics-card">
+                              <div class="experiment-analytics-head">
+                                <a-icon type="sliders" />
+                                <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsParamSensitivity') }}</span>
+                                <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsParamSensitivityHint') }}</span>
+                              </div>
+                              <div ref="experimentParamSensitivityChart" class="experiment-analytics-chart"></div>
+                            </div>
+                            <div class="experiment-analytics-card">
+                              <div class="experiment-analytics-head">
+                                <a-icon type="dot-chart" />
+                                <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsRiskReturn') }}</span>
+                                <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsRiskReturnHint') }}</span>
+                              </div>
+                              <div ref="experimentScatterChart" class="experiment-analytics-chart"></div>
+                            </div>
+                            <div class="experiment-analytics-card">
+                              <div class="experiment-analytics-head">
+                                <a-icon type="radar-chart" />
+                                <span class="experiment-analytics-title">{{ $t('indicatorIde.analyticsRadar') }}</span>
+                                <span class="experiment-analytics-sub">{{ $t('indicatorIde.analyticsRadarHint') }}</span>
+                              </div>
+                              <div ref="experimentRadarChart" class="experiment-analytics-chart"></div>
+                            </div>
                           </div>
                         </div>
 
@@ -1738,6 +1784,9 @@ export default {
       elapsedTimer: null,
       experimentScatterInstance: null,
       experimentRadarInstance: null,
+      experimentConvergenceInstance: null,
+      experimentOosMatrixInstance: null,
+      experimentParamSensitivityInstance: null,
       experimentChartsResizeHandler: null,
 
       /** 最近一次成功回测时的图表上下文（market|symbol|timeframe|indicatorId） */
@@ -2023,7 +2072,71 @@ export default {
       return list.filter(c => c && c.score && c.result)
     },
     experimentHasAnalytics () {
-      return this.experimentAnalyticsCandidates.length >= 2
+      const analytics = this.experimentAnalytics || {}
+      return this.experimentAnalyticsCandidates.length >= 2 ||
+        ((analytics.convergence || []).length >= 2) ||
+        ((analytics.parameterSensitivity || []).length > 0)
+    },
+    experimentAnalytics () {
+      return (this.experimentResult && this.experimentResult.analytics) || {}
+    },
+    experimentAnalyticsSummary () {
+      return this.experimentAnalytics.summary || {}
+    },
+    experimentScoreDistribution () {
+      return this.experimentAnalytics.scoreDistribution || {}
+    },
+    experimentConvergenceData () {
+      return this.experimentAnalytics.convergence || []
+    },
+    experimentOosMatrixData () {
+      return this.experimentAnalytics.oosMatrix || []
+    },
+    experimentParameterSensitivityData () {
+      return this.experimentAnalytics.parameterSensitivity || []
+    },
+    experimentOptimizerMethodLabel () {
+      const summary = this.experimentAnalyticsSummary || {}
+      const exp = (this.experimentResult && this.experimentResult.experiment) || {}
+      return this.formatExperimentOptimizerMethod(summary.method || exp.method || this.structuredTuneMethod)
+    },
+    experimentDataAuditCards () {
+      const summary = this.experimentAnalyticsSummary || {}
+      const dist = this.experimentScoreDistribution || {}
+      const evalCount = Number(summary.evaluationCount || this.experimentAnalyticsCandidates.length || 0)
+      const dims = Number(summary.parameterCount || this.experimentEnabledSweepDimensions.length || 0)
+      const std = dist.std == null ? '--' : Number(dist.std || 0).toFixed(2)
+      const oosCount = Number(summary.oosCount || this.experimentOosMatrixData.length || 0)
+      return [
+        {
+          key: 'optimizer',
+          icon: 'deployment-unit',
+          label: this.$t('indicatorIde.optimizerModel'),
+          value: this.experimentOptimizerMethodLabel,
+          hint: this.$t('indicatorIde.optimizerModelHint')
+        },
+        {
+          key: 'budget',
+          icon: 'database',
+          label: this.$t('indicatorIde.evaluationBudget'),
+          value: `${evalCount} / ${dims}`,
+          hint: this.$t('indicatorIde.evaluationBudgetHint')
+        },
+        {
+          key: 'distribution',
+          icon: 'bar-chart',
+          label: this.$t('indicatorIde.scoreDispersion'),
+          value: std,
+          hint: this.$t('indicatorIde.scoreDispersionHint')
+        },
+        {
+          key: 'oos',
+          icon: 'safety-certificate',
+          label: this.$t('indicatorIde.oosAudit'),
+          value: oosCount ? `${oosCount}` : '--',
+          hint: this.$t('indicatorIde.oosAuditHint')
+        }
+      ]
     },
     experimentBestComponents () {
       const best = this.experimentBest
@@ -3101,6 +3214,30 @@ export default {
       }
       return config
     },
+    parseIndicatorContractHeaders (code) {
+      const pairRe = /\b(signal_form|exit_owner|flip_mode)\s*:?\s*(\S+)/ig
+      const out = {}
+      if (!code) return out
+      for (const rawLine of code.split('\n')) {
+        const line = rawLine.trim()
+        if (!line.startsWith('#')) continue
+        pairRe.lastIndex = 0
+        let m
+        while ((m = pairRe.exec(line.slice(1).trim())) !== null) {
+          const key = String(m[1] || '').toLowerCase()
+          const val = String(m[2] || '').trim()
+          if (key === 'exit_owner') {
+            const owner = val.toLowerCase()
+            if (owner === 'indicator' || owner === 'engine') out.exit_owner = owner
+          } else if (key === 'signal_form') {
+            out.signal_form = val.toLowerCase()
+          } else if (key === 'flip_mode') {
+            out.flip_mode = val.toUpperCase()
+          }
+        }
+      }
+      return out
+    },
     parseIndicatorParamRaw (code) {
       const lineRe = /^#\s*@param\s+(\w+)\s+(int|float|bool|str|string)\s+(\S+)/i
       const params = {}
@@ -3132,6 +3269,7 @@ export default {
     /** 与后端 StrategyConfigParser 一致：风控/仓位仅来自 @strategy（0–1 小数比例） */
     strategyConfigFromCode (code) {
       const raw = this.parseStrategyAnnotationRaw(code || '')
+      const headers = this.parseIndicatorContractHeaders(code || '')
       const toFloat = (v) => { const f = parseFloat(v); return isNaN(f) ? null : f }
       const toBool = (v) => ['true', '1', 'yes', 'on'].includes(String(v).toLowerCase())
 
@@ -3152,7 +3290,7 @@ export default {
       const fundingRateAnnualNum = Number(this.fundingRateAnnual)
       const fundingIntervalNum = Number(this.fundingIntervalHours)
 
-      return {
+      const out = {
         risk: {
           stopLossPct,
           takeProfitPct,
@@ -3180,6 +3318,8 @@ export default {
             : 8
         }
       }
+      if (headers.exit_owner) out.exitOwner = headers.exit_owner
+      return out
     },
     buildBacktestStrategyConfig () {
       return this.strategyConfigFromCode(this.currentCode || '')
@@ -3992,13 +4132,19 @@ export default {
       })
     },
     _normalizeOverrideKey (key) {
-      return String(key || '').replace(/strategy_config\./g, 'strategyConfig.')
+      return String(key || '')
+        .replace(/strategy_config\./g, 'strategyConfig.')
+        .replace(/risk_params/g, 'riskParams')
+        .replace(/indicator_params/g, 'indicatorParams')
+        .replace(/position_params/g, 'positionParams')
     },
     humanizeExperimentKey (key) {
       const n = this._normalizeOverrideKey(key)
+      const leaf = String(n || '').split('.').pop()
       const map = {
         riskParams: this.$t('indicatorIde.riskParamsGroup'),
         indicatorParams: this.$t('indicatorIde.indicatorParamsGroup'),
+        positionParams: this.$t('indicatorIde.positionParamsGroup'),
         stopLossPct: this.$t('indicatorIde.stopLoss'),
         takeProfitPct: this.$t('indicatorIde.takeProfit'),
         entryPct: this.$t('indicatorIde.entryPct'),
@@ -4016,7 +4162,38 @@ export default {
         commission: this.$t('indicatorIde.commission'),
         slippage: this.$t('indicatorIde.slippage')
       }
-      return map[n] || n
+      const scopedMap = {
+        'riskParams.stopLossPct': this.$t('indicatorIde.stopLoss'),
+        'riskParams.takeProfitPct': this.$t('indicatorIde.takeProfit'),
+        'riskParams.trailingStopPct': this.$t('indicatorIde.trailingPct'),
+        'riskParams.trailingActivationPct': this.$t('indicatorIde.activation'),
+        'riskParams.trailingEnabled': this.$t('indicatorIde.trailing'),
+        'positionParams.entryPct': this.$t('indicatorIde.entryPct'),
+        'positionParams.leverage': this.$t('indicatorIde.leverage')
+      }
+      if (map[n]) return map[n]
+      if (scopedMap[n]) return scopedMap[n]
+      if (n.startsWith('strategyConfig.risk.') || n.startsWith('riskParams.')) {
+        return map[leaf] || this.humanizeExperimentParamName(leaf)
+      }
+      if (n.startsWith('strategyConfig.position.') || n.startsWith('positionParams.')) {
+        return map[leaf] || this.humanizeExperimentParamName(leaf)
+      }
+      if (n.startsWith('indicatorParams.')) {
+        return this.humanizeExperimentParamName(leaf)
+      }
+      return map[leaf] || this.humanizeExperimentParamName(n)
+    },
+    humanizeExperimentParamName (key) {
+      const raw = String(key || '').trim()
+      if (!raw) return '--'
+      return raw
+        .replace(/^(indicatorParams|riskParams|positionParams|strategyConfig)\./, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/[._-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b([a-z])/g, m => m.toUpperCase())
     },
     humanizeExperimentScoreKey (key) {
       const map = {
@@ -4071,17 +4248,29 @@ export default {
       return this.translateExperimentRegime(segment.regime || segment.label || '')
     },
     formatExperimentOverrideValue (key, value) {
-      if (key === 'riskParams' || key === 'indicatorParams') {
+      const n = this._normalizeOverrideKey(key)
+      const leaf = String(n || '').split('.').pop()
+      if (n === 'riskParams' || n === 'indicatorParams' || n === 'positionParams') {
         try {
           return JSON.stringify(value)
         } catch (_) {
           return String(value)
         }
       }
-      if (key === 'trailingEnabled') return value ? 'true' : 'false'
-      if (String(key).includes('Pct')) return `${(Number(value || 0) * 100).toFixed(2)}%`
-      if (key === 'leverage') return `${Number(value || 0)}x`
+      if (leaf === 'trailingEnabled') return value ? 'true' : 'false'
+      if (String(leaf).includes('Pct')) return `${(Number(value || 0) * 100).toFixed(2)}%`
+      if (leaf === 'leverage') return `${Number(value || 0)}x`
       return String(value)
+    },
+    formatExperimentOptimizerMethod (method) {
+      const map = {
+        llm: this.$t('indicatorIde.optimizerMethodLlm'),
+        grid: this.$t('indicatorIde.optimizerMethodGrid'),
+        random: this.$t('indicatorIde.optimizerMethodRandom'),
+        de: this.$t('indicatorIde.optimizerMethodDe'),
+        tpe: this.$t('indicatorIde.optimizerMethodTpe')
+      }
+      return map[String(method || '').toLowerCase()] || String(method || '--')
     },
     formatExperimentSource (source) {
       if (!source) return '--'
@@ -4089,7 +4278,9 @@ export default {
         baseline: this.$t('indicatorIde.experimentSourceBaseline'),
         manual_variant: this.$t('indicatorIde.experimentSourceManual'),
         evolution_grid: this.$t('indicatorIde.experimentSourceGrid'),
-        evolution_random: this.$t('indicatorIde.experimentSourceRandom')
+        evolution_random: this.$t('indicatorIde.experimentSourceRandom'),
+        evolution_de: this.$t('indicatorIde.experimentSourceDe'),
+        evolution_tpe: this.$t('indicatorIde.experimentSourceTpe')
       }
       if (map[source]) return map[source]
       const aiMatch = String(source).match(/^ai_round_(\d+)$/)
@@ -4156,7 +4347,8 @@ export default {
           this.$message.error(response.msg || this.$t('indicatorIde.backtestFailed'))
         }
       } catch (e) {
-        this.$message.error(e.message || this.$t('indicatorIde.backtestFailed'))
+        const backendMsg = e && e.response && e.response.data && (e.response.data.msg || e.response.data.message)
+        this.$message.error(e.backendMessage || e.message || backendMsg || this.$t('indicatorIde.backtestFailed'))
       } finally {
         this.running = false
         clearInterval(this.elapsedTimer)
@@ -4871,6 +5063,18 @@ export default {
         try { this.experimentRadarInstance.dispose() } catch { /* ignore */ }
         this.experimentRadarInstance = null
       }
+      if (this.experimentConvergenceInstance) {
+        try { this.experimentConvergenceInstance.dispose() } catch { /* ignore */ }
+        this.experimentConvergenceInstance = null
+      }
+      if (this.experimentOosMatrixInstance) {
+        try { this.experimentOosMatrixInstance.dispose() } catch { /* ignore */ }
+        this.experimentOosMatrixInstance = null
+      }
+      if (this.experimentParamSensitivityInstance) {
+        try { this.experimentParamSensitivityInstance.dispose() } catch { /* ignore */ }
+        this.experimentParamSensitivityInstance = null
+      }
       if (this.experimentChartsResizeHandler) {
         window.removeEventListener('resize', this.experimentChartsResizeHandler)
         this.experimentChartsResizeHandler = null
@@ -4882,15 +5086,260 @@ export default {
         return
       }
       this.$nextTick(() => {
+        this.renderExperimentConvergence()
+        this.renderExperimentOosMatrix()
+        this.renderExperimentParamSensitivity()
         this.renderExperimentScatter()
         this.renderExperimentRadar()
         if (!this.experimentChartsResizeHandler) {
           this.experimentChartsResizeHandler = () => {
+            if (this.experimentConvergenceInstance) this.experimentConvergenceInstance.resize()
+            if (this.experimentOosMatrixInstance) this.experimentOosMatrixInstance.resize()
+            if (this.experimentParamSensitivityInstance) this.experimentParamSensitivityInstance.resize()
             if (this.experimentScatterInstance) this.experimentScatterInstance.resize()
             if (this.experimentRadarInstance) this.experimentRadarInstance.resize()
           }
           window.addEventListener('resize', this.experimentChartsResizeHandler)
         }
+      })
+    },
+    setExperimentEmptyChart (instance, text) {
+      if (!instance) return
+      const dk = this.isDarkTheme
+      instance.setOption({
+        backgroundColor: 'transparent',
+        title: {
+          text,
+          left: 'center',
+          top: 'middle',
+          textStyle: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 12, fontWeight: 'normal' }
+        }
+      })
+    },
+    renderExperimentConvergence () {
+      const dom = this.$refs.experimentConvergenceChart
+      if (!dom) return
+      if (this.experimentConvergenceInstance) {
+        try { this.experimentConvergenceInstance.dispose() } catch { /* ignore */ }
+      }
+      this.experimentConvergenceInstance = echarts.init(dom)
+      const dk = this.isDarkTheme
+      const rows = (this.experimentConvergenceData || []).filter(r => r && r.index != null)
+      if (rows.length < 2) {
+        this.setExperimentEmptyChart(this.experimentConvergenceInstance, this.$t('indicatorIde.analyticsNoConvergence'))
+        return
+      }
+      const evalScores = rows.map(r => Number(r.score || 0))
+      const bestScores = rows.map(r => Number(r.bestScore || r.score || 0))
+      this.experimentConvergenceInstance.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: dk ? '#1f1f1f' : '#fff',
+          borderColor: dk ? '#434343' : '#ddd',
+          textStyle: { color: dk ? 'rgba(255,255,255,0.88)' : '#333', fontSize: 12 },
+          formatter: (params) => {
+            const idx = (params && params[0] && params[0].dataIndex) || 0
+            const row = rows[idx] || {}
+            return `<div style="min-width:180px;">
+              <div style="font-weight:600;margin-bottom:4px;">#${row.index} ${row.name || ''}</div>
+              <div>${this.$t('indicatorIde.score')}: <b>${Number(row.score || 0).toFixed(2)}</b></div>
+              <div>${this.$t('indicatorIde.analyticsBestSoFar')}: <b style="color:#1890ff;">${Number(row.bestScore || 0).toFixed(2)}</b></div>
+              <div>${this.$t('indicatorIde.totalReturn')}: <b>${this.fmtPct(row.totalReturn)}</b></div>
+            </div>`
+          }
+        },
+        grid: { left: 42, right: 18, top: 20, bottom: 34 },
+        xAxis: {
+          type: 'category',
+          data: rows.map(r => String(r.index)),
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 10 },
+          axisLine: { lineStyle: { color: dk ? '#303030' : '#e0e0e0' } }
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: Math.max(100, Math.ceil(Math.max(...bestScores, ...evalScores) / 10) * 10),
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 10 },
+          splitLine: { lineStyle: { color: dk ? 'rgba(255,255,255,0.06)' : '#f0f0f0', type: 'dashed' } }
+        },
+        series: [
+          {
+            name: this.$t('indicatorIde.analyticsTrialScore'),
+            type: 'bar',
+            data: evalScores,
+            barMaxWidth: 14,
+            itemStyle: { color: dk ? 'rgba(88,166,255,0.35)' : 'rgba(24,144,255,0.22)' }
+          },
+          {
+            name: this.$t('indicatorIde.analyticsBestSoFar'),
+            type: 'line',
+            data: bestScores,
+            smooth: 0.25,
+            symbol: 'circle',
+            symbolSize: 5,
+            lineStyle: { color: '#13c2c2', width: 2.5 },
+            itemStyle: { color: '#13c2c2' },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(19,194,194,0.18)' },
+                { offset: 1, color: 'rgba(19,194,194,0)' }
+              ])
+            }
+          }
+        ]
+      })
+    },
+    renderExperimentOosMatrix () {
+      const dom = this.$refs.experimentOosMatrixChart
+      if (!dom) return
+      if (this.experimentOosMatrixInstance) {
+        try { this.experimentOosMatrixInstance.dispose() } catch { /* ignore */ }
+      }
+      this.experimentOosMatrixInstance = echarts.init(dom)
+      const dk = this.isDarkTheme
+      const rows = this.experimentOosMatrixData || []
+      if (!rows.length) {
+        this.setExperimentEmptyChart(this.experimentOosMatrixInstance, this.$t('indicatorIde.analyticsNoOosMatrix'))
+        return
+      }
+      const points = rows.map((r, idx) => {
+        const isScore = Number(r.isScore || 0)
+        const oosScore = Number(r.oosScore || 0)
+        const degrade = r.degradation == null ? 0 : Number(r.degradation || 0)
+        return {
+          name: r.name,
+          value: [isScore, oosScore, Math.abs(degrade)],
+          symbolSize: Math.max(12, Math.min(28, 14 + Math.abs(degrade) * 18)),
+          itemStyle: {
+            color: r.overfit ? '#f5222d' : (degrade > 0.2 ? '#fa8c16' : '#52c41a'),
+            borderColor: dk ? 'rgba(255,255,255,0.35)' : '#fff',
+            borderWidth: 1.5
+          },
+          _meta: { idx, isScore, oosScore, degrade, isReturn: r.isReturn, oosReturn: r.oosReturn, overfit: r.overfit }
+        }
+      })
+      const maxScore = Math.max(60, ...points.map(p => Math.max(p.value[0], p.value[1]))) + 8
+      this.experimentOosMatrixInstance.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: dk ? '#1f1f1f' : '#fff',
+          borderColor: dk ? '#434343' : '#ddd',
+          textStyle: { color: dk ? 'rgba(255,255,255,0.88)' : '#333', fontSize: 12 },
+          formatter: (p) => {
+            const m = (p.data && p.data._meta) || {}
+            return `<div style="min-width:170px;">
+              <div style="font-weight:600;margin-bottom:4px;">${p.data.name || ''}</div>
+              <div>IS ${this.$t('indicatorIde.score')}: <b>${m.isScore.toFixed(2)}</b></div>
+              <div>OOS ${this.$t('indicatorIde.score')}: <b>${m.oosScore.toFixed(2)}</b></div>
+              <div>${this.$t('indicatorIde.oosDegradation')}: <b>${(m.degrade * 100).toFixed(1)}%</b></div>
+              <div>IS/OOS ${this.$t('indicatorIde.totalReturn')}: <b>${this.fmtPct(m.isReturn)} / ${this.fmtPct(m.oosReturn)}</b></div>
+            </div>`
+          }
+        },
+        grid: { left: 42, right: 18, top: 22, bottom: 38 },
+        xAxis: {
+          type: 'value',
+          name: 'IS',
+          min: 0,
+          max: Math.ceil(maxScore),
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 10 },
+          splitLine: { lineStyle: { color: dk ? 'rgba(255,255,255,0.06)' : '#f0f0f0', type: 'dashed' } }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'OOS',
+          min: 0,
+          max: Math.ceil(maxScore),
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 10 },
+          splitLine: { lineStyle: { color: dk ? 'rgba(255,255,255,0.06)' : '#f0f0f0', type: 'dashed' } }
+        },
+        series: [
+          {
+            type: 'line',
+            data: [[0, 0], [Math.ceil(maxScore), Math.ceil(maxScore)]],
+            silent: true,
+            symbol: 'none',
+            lineStyle: { color: dk ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.16)', type: 'dashed' }
+          },
+          {
+            type: 'scatter',
+            data: points,
+            emphasis: { itemStyle: { shadowBlur: 14, shadowColor: 'rgba(24,144,255,0.45)' } }
+          }
+        ]
+      })
+    },
+    renderExperimentParamSensitivity () {
+      const dom = this.$refs.experimentParamSensitivityChart
+      if (!dom) return
+      if (this.experimentParamSensitivityInstance) {
+        try { this.experimentParamSensitivityInstance.dispose() } catch { /* ignore */ }
+      }
+      this.experimentParamSensitivityInstance = echarts.init(dom)
+      const dk = this.isDarkTheme
+      const rows = (this.experimentParameterSensitivityData || []).slice(0, 8)
+      if (!rows.length) {
+        this.setExperimentEmptyChart(this.experimentParamSensitivityInstance, this.$t('indicatorIde.analyticsNoParamSensitivity'))
+        return
+      }
+      const plottedRows = rows.slice().reverse()
+      const labels = plottedRows.map(r => this.humanizeExperimentKey(r.key))
+      const effects = plottedRows.map(r => Number(r.effect || 0))
+      this.experimentParamSensitivityInstance.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' },
+          backgroundColor: dk ? '#1f1f1f' : '#fff',
+          borderColor: dk ? '#434343' : '#ddd',
+          textStyle: { color: dk ? 'rgba(255,255,255,0.88)' : '#333', fontSize: 12 },
+          formatter: (params) => {
+            const idx = (params && params[0] && params[0].dataIndex) || 0
+            const row = plottedRows[idx] || {}
+            const corr = row.correlation == null ? '--' : Number(row.correlation || 0).toFixed(2)
+            return `<div style="min-width:190px;">
+              <div style="font-weight:600;margin-bottom:4px;">${this.humanizeExperimentKey(row.key)}</div>
+              <div>${this.$t('indicatorIde.analyticsScoreSpread')}: <b>${Number(row.effect || 0).toFixed(2)}</b></div>
+              <div>${this.$t('indicatorIde.analyticsBestValue')}: <b>${this.formatExperimentOverrideValue(row.key, row.bestValue)}</b> (${Number(row.bestAvgScore || 0).toFixed(2)})</div>
+              <div>${this.$t('indicatorIde.analyticsWorstValue')}: <b>${this.formatExperimentOverrideValue(row.key, row.worstValue)}</b> (${Number(row.worstAvgScore || 0).toFixed(2)})</div>
+              <div>${this.$t('indicatorIde.analyticsCorrelation')}: <b>${corr}</b></div>
+            </div>`
+          }
+        },
+        grid: { left: 108, right: 20, top: 18, bottom: 28 },
+        xAxis: {
+          type: 'value',
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.45)' : '#999', fontSize: 10 },
+          splitLine: { lineStyle: { color: dk ? 'rgba(255,255,255,0.06)' : '#f0f0f0', type: 'dashed' } }
+        },
+        yAxis: {
+          type: 'category',
+          data: labels,
+          axisLabel: { color: dk ? 'rgba(255,255,255,0.7)' : '#555', fontSize: 10, width: 96, overflow: 'truncate' },
+          axisLine: { show: false },
+          axisTick: { show: false }
+        },
+        series: [{
+          type: 'bar',
+          data: effects,
+          barMaxWidth: 16,
+          itemStyle: {
+            color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+              { offset: 0, color: '#1890ff' },
+              { offset: 1, color: '#13c2c2' }
+            ]),
+            borderRadius: [0, 6, 6, 0]
+          },
+          label: {
+            show: true,
+            position: 'right',
+            color: dk ? 'rgba(255,255,255,0.65)' : '#666',
+            fontSize: 10,
+            formatter: ({ value }) => Number(value || 0).toFixed(1)
+          }
+        }]
       })
     },
     renderExperimentScatter () {
@@ -4940,9 +5389,9 @@ export default {
           textStyle: { color: dk ? 'rgba(255,255,255,0.88)' : '#333', fontSize: 12 },
           formatter: (p) => {
             const m = (p.data && p.data._meta) || {}
-            const tag = m.isBest ? ` <span style="color:#f5a623;font-weight:600;">★ Best</span>` : ''
+            const translatedBestTag = m.isBest ? ` <span style="color:#f5a623;font-weight:600;">&#9733; ${this.$t('indicatorIde.analyticsRadarBest')}</span>` : ''
             return `<div style="min-width:160px;">
-              <div style="font-weight:600; margin-bottom:4px;">${p.data.name}${tag}</div>
+              <div style="font-weight:600; margin-bottom:4px;">${p.data.name}${translatedBestTag}</div>
               <div>${this.$t('indicatorIde.totalReturn')}: <b style="color:${m.ret >= 0 ? '#52c41a' : '#f5222d'};">${m.ret.toFixed(2)}%</b></div>
               <div>${this.$t('indicatorIde.maxDrawdown')}: <b style="color:#f5222d;">${m.dd.toFixed(2)}%</b></div>
               <div>${this.$t('indicatorIde.sharpeRatio')}: <b>${m.sharpe.toFixed(2)}</b></div>
@@ -5443,6 +5892,13 @@ export default {
       if (this.cmInstance) this.cmInstance.setOption('theme', this.isDarkTheme ? 'monokai' : 'eclipse')
       if (this.hasResult) this.$nextTick(() => this.renderEquityChart())
       if (this.experimentHasAnalytics) this.renderExperimentCharts()
+    },
+    '$i18n.locale' () {
+      this.$nextTick(() => {
+        if (this.hasResult) this.renderEquityChart()
+        if (this.experimentHasAnalytics) this.renderExperimentCharts()
+        this.ensureChartReady()
+      })
     },
     experimentHasAnalytics (val) {
       if (val) this.renderExperimentCharts()
@@ -7914,15 +8370,97 @@ body.realdark .backtest-panel-toolbar {
   }
 }
 
+.experiment-lab {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #e6f4ff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f7fbff 100%);
+}
+.experiment-lab-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.experiment-lab-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #697386;
+}
+.experiment-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.experiment-audit-card {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #fff;
+  i {
+    margin-top: 2px;
+    color: #1890ff;
+  }
+  div {
+    min-width: 0;
+  }
+  span,
+  small {
+    display: block;
+    color: #8c8c8c;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  strong {
+    display: block;
+    margin: 2px 0;
+    color: #172033;
+    font-size: 16px;
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 1280px) {
+  .experiment-audit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .experiment-lab-head {
+    flex-direction: column;
+  }
+  .experiment-audit-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .experiment-analytics {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   gap: 12px;
   margin-top: 12px;
 }
+.experiment-analytics--lab {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.experiment-analytics-card--wide {
+  grid-column: span 2;
+}
 @media (max-width: 1200px) {
   .experiment-analytics {
     grid-template-columns: 1fr;
+  }
+  .experiment-analytics-card--wide {
+    grid-column: span 1;
   }
 }
 .experiment-analytics-card {

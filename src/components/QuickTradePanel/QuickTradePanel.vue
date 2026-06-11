@@ -73,19 +73,10 @@
                 <a-tag v-if="c.market_type" size="small" style="margin-left: 6px;">{{ c.market_type }}</a-tag>
               </a-select-option>
             </a-select>
-            <div v-if="!credLoading && credentials.length === 0" class="qt-no-cred-actions">
-              <a-button type="primary" block size="small" @click="showAddExchangeModal = true">
+            <div class="qt-account-actions">
+              <a-button type="primary" block size="small" class="qt-add-account-btn" @click="showAddExchangeModal = true">
                 <a-icon type="plus" /> {{ $t('quickTrade.addAccountInline') }}
               </a-button>
-            </div>
-            <div class="qt-manage-link">
-              <a @click.prevent="showAddExchangeModal = true">
-                <a-icon type="plus-circle" style="margin-right: 4px;" />{{ $t('quickTrade.addAccountInline') }}
-              </a>
-              <span class="qt-manage-sep">·</span>
-              <router-link to="/profile?tab=exchange">
-                <a-icon type="setting" style="margin-right: 4px;" />{{ $t('profile.exchange.goToManage') }}
-              </router-link>
             </div>
             <!-- 合约 + 现货余额（与当前交易模式联动高亮） -->
             <div class="qt-balance" v-if="selectedCredentialId">
@@ -1243,7 +1234,7 @@ export default {
   .qt-direction-toggle .qt-dir-btn { padding: 8px; font-size: 13px; border-radius: 6px; }
   .qt-quick-amounts { margin-top: 6px; margin-bottom: 2px; }
   .qt-amount-block { padding-bottom: 6px; }
-  .qt-manage-link { font-size: 11px; }
+  .qt-account-actions .qt-add-account-btn { height: 30px; }
 }
 
 /* 指标 IDE 浮动闪电交易：分区更清晰 */
@@ -1475,21 +1466,14 @@ export default {
   border: 1px solid rgba(255, 77, 79, 0.25);
 }
 
-.qt-no-cred-actions {
-  margin-top: 10px;
+.qt-account-actions {
+  margin-top: 8px;
 }
 
-.qt-manage-link {
-  margin-top: 8px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  .qt-manage-sep {
-    color: #ccc;
-    user-select: none;
-  }
+.qt-add-account-btn {
+  height: 32px;
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .qt-direction-toggle {
@@ -2069,9 +2053,8 @@ export default {
     .qt-balance-value { color: #73d13d; }
     .qt-balance-line--active .qt-balance-value { color: #95de64; }
   }
-  .qt-manage-link {
-    a { color: #58a6ff; }
-    .qt-manage-sep { color: #555; }
+  .qt-add-account-btn {
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.22);
   }
   .qt-card {
     background: #262626;

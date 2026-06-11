@@ -175,7 +175,7 @@
             </div>
 
             <!-- AI 组特殊：显示 OpenRouter 余额查询卡片 -->
-            <div v-if="activeGroupKey === 'ai'" class="openrouter-balance-card">
+            <div v-if="activeGroupKey === 'ai' && currentLlmProvider === 'openrouter'" class="openrouter-balance-card">
               <a-card size="small" :bordered="false">
                 <div class="balance-header">
                   <span class="balance-title">
@@ -228,7 +228,123 @@
             </div>
 
             <a-form :form="form" layout="vertical" class="settings-form">
-              <a-row :gutter="24">
+              <div v-if="activeGroupKey === 'ai'" class="ai-settings-panel">
+                <a-alert
+                  class="ai-provider-alert"
+                  type="info"
+                  show-icon
+                  :message="aiProviderAlertTitle"
+                  :description="aiProviderAlertDesc"
+                />
+
+                <section
+                  v-for="section in aiSections"
+                  :key="section.key"
+                  class="ai-settings-section"
+                >
+                  <div class="ai-section-header">
+                    <div>
+                      <h4>{{ section.title }}</h4>
+                      <p v-if="section.description">{{ section.description }}</p>
+                    </div>
+                    <a-tag v-if="section.badge" :color="section.badgeColor || 'blue'">
+                      {{ section.badge }}
+                    </a-tag>
+                  </div>
+
+                  <a-row :gutter="24">
+                    <a-col
+                      v-for="item in section.items"
+                      :key="item.key"
+                      :xs="24"
+                      :sm="24"
+                      :md="item.key === 'LLM_PROVIDER' ? 24 : 12"
+                      :lg="item.key === 'LLM_PROVIDER' ? 24 : 12"
+                    >
+                      <a-form-item>
+                        <template slot="label">
+                          <span class="form-label-with-tooltip">
+                            <span class="label-text">{{ getItemLabel(activeGroupKey, item) }}</span>
+                            <a-tooltip v-if="item.description" placement="top">
+                              <template slot="title">
+                                {{ getItemDescription(activeGroupKey, item) }}
+                              </template>
+                              <a-icon type="question-circle" class="help-icon" />
+                            </a-tooltip>
+                            <a
+                              v-if="item.link"
+                              :href="item.link"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="api-link"
+                              @click.stop
+                            >
+                              <a-icon type="link" />
+                              {{ getLinkText(item.link_text) }}
+                            </a>
+                          </span>
+                        </template>
+                        <template v-if="item.type === 'text'">
+                          <a-input
+                            v-decorator="[item.key, { initialValue: getFieldValue(activeGroupKey, item.key) }]"
+                            :placeholder="item.default ? `${$t('settings.default')}: ${item.default}` : ''"
+                            allowClear
+                          />
+                        </template>
+                        <template v-else-if="item.type === 'password'">
+                          <div class="password-field">
+                            <a-input
+                              v-decorator="[item.key, { initialValue: getFieldValue(activeGroupKey, item.key) }]"
+                              :type="passwordVisible[item.key] ? 'text' : 'password'"
+                              :placeholder="$t('settings.inputApiKey')"
+                              allowClear
+                            >
+                              <a-icon
+                                slot="suffix"
+                                :type="passwordVisible[item.key] ? 'eye' : 'eye-invisible'"
+                                @click="togglePasswordVisible(item.key)"
+                                style="cursor: pointer"
+                              />
+                            </a-input>
+                          </div>
+                        </template>
+                        <template v-else-if="item.type === 'number'">
+                          <a-input-number
+                            v-decorator="[item.key, { initialValue: getNumberValue(activeGroupKey, item.key, item.default) }]"
+                            :placeholder="item.default ? `${$t('settings.default')}: ${item.default}` : ''"
+                            style="width: 100%"
+                          />
+                        </template>
+                        <template v-else-if="item.type === 'boolean'">
+                          <a-switch
+                            v-decorator="[item.key, { valuePropName: 'checked', initialValue: getBoolValue(activeGroupKey, item.key, item.default) }]"
+                          />
+                        </template>
+                        <template v-else-if="item.type === 'select'">
+                          <a-select
+                            v-decorator="[item.key, { initialValue: getFieldValue(activeGroupKey, item.key) || item.default }]"
+                            :placeholder="item.default ? `${$t('settings.default')}: ${item.default}` : $t('settings.pleaseSelect')"
+                            @change="onSelectFieldChange(item, $event)"
+                          >
+                            <a-select-option
+                              v-for="opt in getSelectOptions(item)"
+                              :key="opt.value"
+                              :value="opt.value"
+                            >
+                              {{ opt.label }}
+                            </a-select-option>
+                          </a-select>
+                        </template>
+                        <div class="field-default" v-if="item.default && item.type !== 'boolean' && item.type !== 'password'">
+                          {{ $t('settings.default') }}: {{ item.default }}
+                        </div>
+                      </a-form-item>
+                    </a-col>
+                  </a-row>
+                </section>
+              </div>
+
+              <a-row v-else :gutter="24">
                 <a-col
                   :xs="24"
                   :sm="24"
@@ -380,7 +496,8 @@ export default {
       showRestartTip: false,
       // OpenRouter 余额
       balanceLoading: false,
-      openrouterBalance: null
+      openrouterBalance: null,
+      selectedLlmProvider: ''
     }
   },
   computed: {
@@ -441,6 +558,64 @@ export default {
       const k = 'settings.search.empty'
       const t = this.$t(k)
       return (t && t !== k) ? t : 'No matching settings'
+    },
+    aiItems () {
+      return (this.currentGroup && Array.isArray(this.currentGroup.items)) ? this.currentGroup.items : []
+    },
+    currentLlmProvider () {
+      return this.selectedLlmProvider || this.getFieldValue('ai', 'LLM_PROVIDER') || 'openrouter'
+    },
+    currentLlmProviderLabel () {
+      const providerItem = this.aiItems.find(item => item.key === 'LLM_PROVIDER')
+      const option = this.getSelectOptions(providerItem).find(opt => opt.value === this.currentLlmProvider)
+      return option ? option.label : this.currentLlmProvider
+    },
+    aiProviderAlertTitle () {
+      return this.tOr('settings.llm.currentProviderTitle', 'Current provider: {provider}')
+        .replace('{provider}', this.currentLlmProviderLabel)
+    },
+    aiProviderAlertDesc () {
+      return this.tOr(
+        'settings.llm.currentProviderDesc',
+        'Only the selected provider fields are shown below. Hidden provider credentials are kept unchanged when you save.'
+      )
+    },
+    aiSections () {
+      const providerSelection = this.aiItems.filter(item => item.key === 'LLM_PROVIDER')
+      const providerItems = this.aiItems.filter(item => item.group === this.currentLlmProvider)
+      const commonItems = this.aiItems.filter(item => {
+        if (item.key === 'LLM_PROVIDER' || item.group || this.isSearchSetting(item)) return false
+        return true
+      })
+      const searchItems = this.aiItems.filter(item => this.isSearchSetting(item))
+      return [
+        {
+          key: 'provider',
+          title: this.tOr('settings.llm.providerSection', 'Model provider'),
+          description: this.tOr('settings.llm.providerSectionDesc', 'Choose the LLM provider used by analysis, code generation, and strategy review.'),
+          items: providerSelection
+        },
+        {
+          key: 'activeProvider',
+          title: this.tOr('settings.llm.activeProviderSection', 'Provider credentials'),
+          description: this.tOr('settings.llm.activeProviderSectionDesc', 'Fill only the key, model, and endpoint for the selected provider.'),
+          badge: this.currentLlmProviderLabel,
+          badgeColor: 'geekblue',
+          items: providerItems
+        },
+        {
+          key: 'common',
+          title: this.tOr('settings.llm.commonSection', 'Common AI parameters'),
+          description: this.tOr('settings.llm.commonSectionDesc', 'Shared behavior used across providers.'),
+          items: commonItems
+        },
+        {
+          key: 'search',
+          title: this.tOr('settings.llm.searchSection', 'News and web search'),
+          description: this.tOr('settings.llm.searchSectionDesc', 'Optional search keys used to enrich AI analysis with market news.'),
+          items: searchItems
+        }
+      ].filter(section => section.items.length > 0)
     }
   },
   beforeCreate () {
@@ -456,6 +631,21 @@ export default {
     onMenuClick ({ key }) {
       this.activeGroupKey = key
       this.searchKeyword = ''
+    },
+    tOr (key, fallback) {
+      const text = this.$t(key)
+      return text && text !== key ? text : fallback
+    },
+    isSearchSetting (item) {
+      const key = item && item.key ? item.key : ''
+      return key.startsWith('SEARCH_') ||
+        key === 'TAVILY_API_KEYS' ||
+        key === 'SERPAPI_KEYS'
+    },
+    onSelectFieldChange (item, value) {
+      if (item && item.key === 'LLM_PROVIDER') {
+        this.selectedLlmProvider = value || 'openrouter'
+      }
     },
     // 兼容后端 schema options 两种格式：
     // - string[]: ['openrouter','openai', ...]
@@ -495,6 +685,7 @@ export default {
 
         if (valuesRes.code === 1) {
           this.values = valuesRes.data
+          this.selectedLlmProvider = (this.values.ai && this.values.ai.LLM_PROVIDER) || 'openrouter'
         }
 
         // After a fresh load: if no group has been picked yet (first mount)
@@ -941,6 +1132,49 @@ export default {
     }
   }
 
+  .ai-settings-panel {
+    .ai-provider-alert {
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+
+    .ai-settings-section {
+      margin-bottom: 22px;
+      padding: 18px 18px 4px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #ffffff;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    .ai-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+
+      h4 {
+        margin: 0 0 4px;
+        color: #1e3a5f;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 0;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.6;
+      }
+    }
+  }
+
   .settings-form {
     /deep/ .ant-form-item-label {
       padding-bottom: 4px;
@@ -1112,6 +1346,25 @@ export default {
       .search-result-group-tag {
         background: rgba(88, 166, 255, 0.18);
         color: #58a6ff;
+      }
+    }
+
+    .ai-settings-panel {
+      .ai-settings-section {
+        background: #161b22;
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .ai-section-header {
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+
+        h4 {
+          color: #e0e6ed;
+        }
+
+        p {
+          color: #8b949e;
+        }
       }
     }
 

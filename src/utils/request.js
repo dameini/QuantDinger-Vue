@@ -64,8 +64,94 @@ function tt (key, fallback) {
   return fallback
 }
 
+function tf (key, fallback, values = {}) {
+  let text = tt(key, fallback)
+  Object.keys(values).forEach(k => {
+    text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), values[k])
+  })
+  return text
+}
+
+function getBackendErrorMessage (error) {
+  const data = error && error.response && error.response.data
+  if (!data) return ''
+  if (typeof data === 'string') return data
+  return data.msg || data.message || data.error || ''
+}
+
+function normalizeBacktestRangeLimitError (error) {
+  const envelope = error && error.response && error.response.data
+  const details = envelope && envelope.data
+  if (!details || details.error_type !== 'BACKTEST_RANGE_LIMIT') return ''
+  const values = {
+    market: details.market || '',
+    symbol: details.symbol || '',
+    timeframe: details.timeframe || '',
+    maxRange: details.max_range || details.max_days || '',
+    maxDays: details.max_days || '',
+    fetchDays: details.fetch_days || '',
+    warmupBars: details.warmup_bars || 0,
+    requestedStart: details.requested_start || '',
+    requestedEnd: details.requested_end || '',
+    recommendedStart: details.recommended_start || '',
+    recommendedEnd: details.recommended_end || ''
+  }
+  values.warmupNote = Number(values.warmupBars) > 0
+    ? tf('request.backtestRangeLimitWarmup', ' including {warmupBars} warmup bars', values)
+    : ''
+  if (details.recommendation_available === false || !values.recommendedStart || !values.recommendedEnd) {
+    return tf(
+      'request.backtestRangeLimitNoSuggestion',
+      'Backtest range is too long for {market}:{symbol} {timeframe}. This provider supports up to {maxRange} ({maxDays} days), but this run needs {fetchDays} days{warmupNote}. The indicator warmup alone exceeds the provider limit. Reduce lookback parameters or use a higher timeframe.',
+      values
+    )
+  }
+  return tf(
+    'request.backtestRangeLimit',
+    'Backtest range is too long for {market}:{symbol} {timeframe}. This provider supports up to {maxRange} ({maxDays} days), but this run needs {fetchDays} days{warmupNote}. Use {recommendedStart} to {requestedEnd}, or keep {requestedStart} and set the end date to {recommendedEnd}.',
+    values
+  )
+}
+
+function normalizeBusinessErrorMessage (message, error) {
+  const backtestRangeLimit = normalizeBacktestRangeLimitError(error)
+  if (backtestRangeLimit) return backtestRangeLimit
+  if (!message) return ''
+  const liveConflict = message.match(/Live strategy conflict: another running strategy already uses the same API key\/exchange\/market\/symbol \(([^)]+)\)\. Please stop strategy (\d+)(?: \((.+)\))? first\./i)
+  if (liveConflict) {
+    const [, scope, strategyId, strategyName] = liveConflict
+    const target = strategyName ? `${strategyId} (${strategyName})` : strategyId
+    return tf(
+      'request.liveStrategyConflict',
+      'Live strategy conflict: only one live strategy can run for the same API key / exchange / market type / symbol ({scope}). Please stop strategy {target} first.',
+      { scope, target }
+    )
+  }
+  const gridSpacing = message.match(/Grid spacing is too narrow after fees: worst cell \[([^\]]+)\] captures ~([0-9.]+)% but needs ~([0-9.]+)% to cover round-trip fees \(([0-9.]+)% per side plus safety buffer\)\. Widen the price range, reduce gridCount, or lower fee settings\./i)
+  if (gridSpacing) {
+    const [, cell, captures, required, fee] = gridSpacing
+    return tf(
+      'request.gridSpacingTooNarrow',
+      'Grid spacing is too narrow after fees: worst cell [{cell}] captures about {captures}% but needs about {required}% to cover round-trip fees ({fee}% per side plus safety buffer). Widen the price range, reduce grid count, or lower fee settings.',
+      { cell, captures, required, fee }
+    )
+  }
+  return message
+}
+
+function attachBackendErrorMessage (error) {
+  const message = normalizeBusinessErrorMessage(getBackendErrorMessage(error), error)
+  if (!message) return error
+  error.backendMessage = message
+  try {
+    error.message = message
+  } catch (e) { /* noop */ }
+  return error
+}
+
 // 异常拦截处理器
 const errorHandler = (error) => {
+  attachBackendErrorMessage(error)
   if (error.response) {
     const data = error.response.data
     if (error.response.status === 403) {

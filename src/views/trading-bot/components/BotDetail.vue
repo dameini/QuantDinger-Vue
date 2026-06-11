@@ -398,6 +398,14 @@
             :botType="bot && bot.bot_type"
           />
         </a-tab-pane>
+        <a-tab-pane key="review" :tab="$t('trading-bot.tab.aiReview')">
+          <strategy-review-report
+            v-if="activeTab === 'review'"
+            :strategyId="bot.id"
+            :isDark="isDark"
+            :botType="bot && bot.bot_type"
+          />
+        </a-tab-pane>
         <a-tab-pane key="logs" :tab="$t('trading-bot.tab.logs')">
           <strategy-logs
             v-if="activeTab === 'logs'"
@@ -414,6 +422,7 @@
 import TradingRecords from '@/views/trading-assistant/components/TradingRecords.vue'
 import PositionRecords from '@/views/trading-assistant/components/PositionRecords.vue'
 import PerformanceAnalysis from '@/views/trading-assistant/components/PerformanceAnalysis.vue'
+import StrategyReviewReport from '@/views/trading-assistant/components/StrategyReviewReport.vue'
 import StrategyLogs from '@/views/trading-assistant/components/StrategyLogs.vue'
 import { getStrategyPositions, getStrategyTrades, getGridRestingOrders } from '@/api/strategy'
 
@@ -472,7 +481,7 @@ const VALUE_DISPLAY_MAP = {
 
 export default {
   name: 'BotDetail',
-  components: { TradingRecords, PositionRecords, PerformanceAnalysis, StrategyLogs },
+  components: { TradingRecords, PositionRecords, PerformanceAnalysis, StrategyReviewReport, StrategyLogs },
   props: {
     bot: { type: Object, default: null },
     isDark: { type: Boolean, default: false },

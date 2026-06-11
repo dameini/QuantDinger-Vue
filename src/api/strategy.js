@@ -26,6 +26,8 @@ const api = {
   verifyCode: '/api/strategies/verify-code',
   aiGenerate: '/api/strategies/ai-generate',
   performance: '/api/strategies/performance',
+  reviewReport: '/api/strategies/review-report',
+  reviewReportHistory: '/api/strategies/review-report/history',
   logs: '/api/strategies/logs',
   gridRestingOrders: '/api/strategies/grid-resting-orders',
   backtest: '/api/strategies/backtest',
@@ -365,6 +367,29 @@ export function getStrategyPerformance (id) {
     url: api.performance,
     method: 'get',
     params: { id }
+  })
+}
+
+/**
+ * Build an AI-assisted strategy review report from factual trades.
+ */
+export function getStrategyReviewReport (id, data = {}) {
+  return request({
+    url: api.reviewReport,
+    method: 'post',
+    params: { id },
+    data
+  })
+}
+
+/**
+ * List or load saved AI strategy review reports.
+ */
+export function getStrategyReviewReportHistory (id, params = {}) {
+  return request({
+    url: api.reviewReportHistory,
+    method: 'get',
+    params: { id, ...params }
   })
 }
 

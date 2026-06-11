@@ -9,6 +9,32 @@ import { readFileSync } from 'node:fs'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
 
+const normalizeVersion = (value) => {
+  let text = String(value || '').trim()
+  if (!text) return ''
+  if (text.startsWith('refs/tags/')) {
+    text = text.slice('refs/tags/'.length)
+  }
+  if (text.startsWith('v') && text.length > 1 && /\d/.test(text[1])) {
+    text = text.slice(1)
+  }
+  if (['latest', 'main', 'master'].includes(text)) {
+    return ''
+  }
+  return text
+}
+
+const resolveAppVersion = (env) => {
+  return normalizeVersion(env.VITE_APP_VERSION) ||
+    normalizeVersion(env.APP_VERSION) ||
+    normalizeVersion(process.env.APP_VERSION) ||
+    normalizeVersion(env.GIT_TAG) ||
+    normalizeVersion(process.env.GIT_TAG) ||
+    normalizeVersion(process.env.GITHUB_REF_NAME) ||
+    normalizeVersion(pkg.version) ||
+    '0.0.0-dev'
+}
+
 const gitHash = (() => {
   try {
     return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
@@ -22,6 +48,7 @@ const buildDate = new Date().toLocaleString()
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const enableMock = env.VITE_ENABLE_MOCK === 'true'
+  const appVersion = resolveAppVersion(env)
 
   return {
     base: './',
@@ -42,9 +69,11 @@ export default defineConfig(({ mode }) => {
       extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json', '.vue']
     },
     define: {
-      APP_VERSION: JSON.stringify(pkg.version),
+      APP_VERSION: JSON.stringify(appVersion),
       GIT_HASH: JSON.stringify(gitHash),
       BUILD_DATE: JSON.stringify(buildDate),
+      'process.env.APP_VERSION': JSON.stringify(appVersion),
+      'process.env.VUE_APP_VERSION': JSON.stringify(appVersion),
       // 兼容旧代码中的 process.env.VUE_APP_* 引用 —— 直接映射到 import.meta.env.VITE_*
       'process.env.VUE_APP_PREVIEW': JSON.stringify(env.VITE_PREVIEW || ''),
       'process.env.VUE_APP_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL || ''),

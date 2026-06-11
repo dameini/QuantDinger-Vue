@@ -549,6 +549,12 @@
                       :strategy-id="selectedStrategy.id"
                       :is-dark="isDarkTheme" />
                   </a-tab-pane>
+                  <a-tab-pane key="review" :tab="$t('trading-assistant.tabs.aiReview')">
+                    <strategy-review-report
+                      v-if="detailTab === 'review'"
+                      :strategy-id="selectedStrategy.id"
+                      :is-dark="isDarkTheme" />
+                  </a-tab-pane>
                   <a-tab-pane v-if="showStrategyDetailBacktest" key="backtest" :tab="$t('strategyCenter.tabs.backtest')">
                     <strategy-backtest-panel
                       v-if="selectedStrategy"
@@ -785,7 +791,7 @@
                     </a-form-item>
 
                     <template v-if="csStrategyTypeUi === 'cross_sectional'">
-                      <a-form-item :label="$t('trading-assistant.form.symbolList')">
+                      <a-form-item :label="$t('trading-assistant.form.symbolList')" :required="true">
                         <a-select
                           v-model="crossSectionalSymbols"
                           mode="multiple"
@@ -871,7 +877,8 @@
 
                     <a-form-item
                       v-if="csStrategyTypeUi !== 'cross_sectional'"
-                      :label="isEditMode ? $t('trading-assistant.form.symbol') : $t('trading-assistant.form.symbols')">
+                      :label="isEditMode ? $t('trading-assistant.form.symbol') : $t('trading-assistant.form.symbols')"
+                      :required="true">
                       <!-- 编辑模式：单选 -->
                       <a-select
                         v-if="isEditMode"
@@ -1349,33 +1356,30 @@
                         :message="$t('trading-assistant.form.liveTradingConfigTitle')"
                         :description="$t('trading-assistant.form.liveTradingConfigHint')" />
 
-                      <a-form-item :label="$t('trading-assistant.form.savedCredential')" class="compact-form-item">
-                        <a-select
-                          v-decorator="['credential_id', {
-                            rules: [{ required: true, message: $t('profile.exchange.noCredentialHint') }],
-                            getValueFromEvent: (val) => val || undefined
-                          }]"
-                          :placeholder="$t('trading-assistant.placeholders.selectSavedCredential')"
-                          allow-clear
-                          show-search
-                          option-filter-prop="children"
-                          :loading="loadingExchangeCredentials"
-                          @change="handleCredentialSelectChange">
-                          <a-select-option
-                            v-for="cred in filteredExchangeCredentials"
-                            :key="cred.id"
-                            :value="cred.id">
-                            {{ formatCredentialLabel(cred) }}
-                          </a-select-option>
-                        </a-select>
-                        <div class="form-item-hint ta-credential-actions" style="margin-top: 6px;">
-                          <a-button type="link" size="small" class="ta-add-cred-btn" @click="showExchangeAccountModal = true">
-                            <a-icon type="plus-circle" /> {{ $t('quickTrade.addAccountInline') }}
+                      <a-form-item :label="$t('trading-assistant.form.savedCredential')" class="compact-form-item ta-credential-form-item">
+                        <div class="ta-credential-row">
+                          <a-select
+                            v-decorator="['credential_id', {
+                              rules: [{ required: true, message: $t('profile.exchange.noCredentialHint') }],
+                              getValueFromEvent: (val) => val || undefined
+                            }]"
+                            class="ta-credential-select"
+                            :placeholder="$t('trading-assistant.placeholders.selectSavedCredential')"
+                            allow-clear
+                            show-search
+                            option-filter-prop="children"
+                            :loading="loadingExchangeCredentials"
+                            @change="handleCredentialSelectChange">
+                            <a-select-option
+                              v-for="cred in filteredExchangeCredentials"
+                              :key="cred.id"
+                              :value="cred.id">
+                              {{ formatCredentialLabel(cred) }}
+                            </a-select-option>
+                          </a-select>
+                          <a-button type="primary" class="ta-add-cred-btn" @click="showExchangeAccountModal = true">
+                            <a-icon type="plus" /> {{ $t('quickTrade.addAccountInline') }}
                           </a-button>
-                          <span class="ta-credential-actions-sep">·</span>
-                          <router-link to="/profile?tab=exchange">
-                            <a-icon type="setting" style="margin-right: 4px;" />{{ $t('profile.exchange.goToManage') }}
-                          </router-link>
                         </div>
                         <a-alert
                           v-if="executionModeUi === 'live' && canUseLiveTrading && !loadingExchangeCredentials && filteredExchangeCredentials.length === 0"
@@ -1386,7 +1390,8 @@
                         >
                           <template slot="description">
                             <span>{{ $t('trading-assistant.noCredentialForLive.desc') }}</span>
-                            <a-button type="primary" size="small" style="margin-left: 8px;" @click="showExchangeAccountModal = true">
+                            <a-button type="primary" size="small" class="ta-empty-add-cred-btn" @click="showExchangeAccountModal = true">
+                              <a-icon type="plus" />
                               {{ $t('quickTrade.addAccountInline') }}
                             </a-button>
                           </template>
@@ -1571,6 +1576,7 @@ import PositionRecords from './components/PositionRecords.vue'
 import StrategyTypeSelector from './components/StrategyTypeSelector.vue'
 import StrategyEditor from './components/StrategyEditor.vue'
 import PerformanceAnalysis from './components/PerformanceAnalysis.vue'
+import StrategyReviewReport from './components/StrategyReviewReport.vue'
 import StrategyLogs from './components/StrategyLogs.vue'
 import ExchangeAccountModal from '@/components/ExchangeAccountModal/ExchangeAccountModal.vue'
 import StrategyBacktestPanel from '@/components/StrategyBacktestPanel.vue'
@@ -1623,6 +1629,7 @@ export default {
     StrategyTypeSelector,
     StrategyEditor,
     PerformanceAnalysis,
+    StrategyReviewReport,
     StrategyLogs,
     ExchangeAccountModal,
     StrategyBacktestPanel
@@ -3621,7 +3628,7 @@ export default {
           this.$message.error(res.msg || this.$t('trading-assistant.messages.batchStartFailed'))
         }
       } catch (error) {
-        this.$message.error(this.$t('trading-assistant.messages.batchStartFailed'))
+        this.$message.error(error.backendMessage || error.message || this.$t('trading-assistant.messages.batchStartFailed'))
       }
     },
     async handleBatchStopStrategies (strategyIds, groupName) {
@@ -3635,7 +3642,7 @@ export default {
           this.$message.error(res.msg || this.$t('trading-assistant.messages.batchStopFailed'))
         }
       } catch (error) {
-        this.$message.error(this.$t('trading-assistant.messages.batchStopFailed'))
+        this.$message.error(error.backendMessage || error.message || this.$t('trading-assistant.messages.batchStopFailed'))
       }
     },
     async handleBatchDeleteStrategies (strategyIds, groupName) {
@@ -3711,7 +3718,7 @@ export default {
           this.$message.error(res.msg || this.$t('trading-assistant.messages.startFailed'))
         }
       } catch (error) {
-        this.$message.error(this.$t('trading-assistant.messages.startFailed'))
+        this.$message.error(error.backendMessage || error.message || this.$t('trading-assistant.messages.startFailed'))
       }
     },
     async handleStopStrategy (id) {
@@ -3728,7 +3735,7 @@ export default {
           this.$message.error(res.msg || this.$t('trading-assistant.messages.stopFailed'))
         }
       } catch (error) {
-        this.$message.error(this.$t('trading-assistant.messages.stopFailed'))
+        this.$message.error(error.backendMessage || error.message || this.$t('trading-assistant.messages.stopFailed'))
       }
     },
     handleDeleteStrategy (strategy) {
@@ -3899,12 +3906,37 @@ export default {
       }
       return config
     },
+    parseIndicatorContractHeaders (code) {
+      const pairRe = /\b(signal_form|exit_owner|flip_mode)\s*:?\s*(\S+)/ig
+      const out = {}
+      if (!code) return out
+      for (const rawLine of code.split('\n')) {
+        const line = rawLine.trim()
+        if (!line.startsWith('#')) continue
+        pairRe.lastIndex = 0
+        let m
+        while ((m = pairRe.exec(line.slice(1).trim())) !== null) {
+          const key = String(m[1] || '').toLowerCase()
+          const val = String(m[2] || '').trim()
+          if (key === 'exit_owner') {
+            const owner = val.toLowerCase()
+            if (owner === 'indicator' || owner === 'engine') out.exit_owner = owner
+          } else if (key === 'signal_form') {
+            out.signal_form = val.toLowerCase()
+          } else if (key === 'flip_mode') {
+            out.flip_mode = val.toUpperCase()
+          }
+        }
+      }
+      return out
+    },
     /**
      * 保存时由后端 StrategyConfigParser.to_trading_config_risk_flat 再次校正；
      * 此处尽量与入库 percent 字段对齐，避免 UI 展示与 DB 短暂不一致。
      */
     buildRiskPositionFromIndicatorCode (code) {
       const raw = this.parseStrategyAnnotationRaw(code || '')
+      const headers = this.parseIndicatorContractHeaders(code || '')
       const toFloat = (v) => {
         const f = parseFloat(v)
         return isNaN(f) ? null : f
@@ -3934,7 +3966,7 @@ export default {
         ? clampPct(ratioToPercent(raw.entryPct))
         : 100
 
-      return {
+      const out = {
         stop_loss_pct: sl,
         take_profit_pct: tp,
         trailing_enabled: trailingEnabled,
@@ -3942,6 +3974,8 @@ export default {
         trailing_activation_pct: trailingActivationPct,
         entry_pct: entryPctOut
       }
+      if (headers.exit_owner) out.exit_owner = headers.exit_owner
+      return out
     },
     /** 编辑策略时保留库里的加减仓配置；新建时全部为关/0 */
     extractScaleReduceFlatFromTradingConfig (tc) {
@@ -7048,6 +7082,52 @@ export default {
 
 .section-inline-alert {
   margin-top: 4px;
+}
+
+.ta-credential-form-item {
+  .ta-credential-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ta-credential-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ta-add-cred-btn {
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .ta-empty-add-cred-btn {
+    margin-left: 8px;
+    font-weight: 600;
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ta-credential-form-item {
+    .ta-credential-row {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .ta-add-cred-btn {
+      width: 100%;
+    }
+
+    .ta-empty-add-cred-btn {
+      display: block;
+      width: 100%;
+      margin: 8px 0 0;
+    }
+  }
 }
 
 .notify-channel-grid {
