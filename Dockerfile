@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # QuantDinger Frontend — multi-arch image published to GHCR.
 #
 # Stage 1 (builder) is pinned to --platform=$BUILDPLATFORM so the Vue build
@@ -27,7 +28,8 @@ RUN apk add --no-cache git && corepack enable
 
 # Copy lockfile + manifest + workspace config first so the install layer caches.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile
 
 COPY . .
 RUN if [ -n "$APP_VERSION" ] || [ -n "$GIT_TAG" ]; then \
